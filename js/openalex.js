@@ -7,7 +7,7 @@ const BASE = 'https://api.openalex.org';
 export const WORK_FIELDS = [
   'id', 'doi', 'title', 'display_name', 'publication_year', 'publication_date',
   'cited_by_count', 'referenced_works', 'authorships', 'primary_location',
-  'biblio', 'type', 'ids', 'language',
+  'biblio', 'type', 'ids', 'language', 'open_access', 'primary_topic',
 ].join(',');
 
 export const settings = { apiKey: '' };
@@ -88,7 +88,7 @@ export async function getCitingWorks(ids, { pages = 2, select = WORK_FIELDS } = 
 export async function searchWorks(query, n = 8) {
   const j = await get('/works', {
     search: query, per_page: n,
-    select: 'id,doi,title,display_name,publication_year,cited_by_count,authorships,primary_location',
+    select: 'id,doi,title,display_name,publication_year,cited_by_count,authorships,primary_location,primary_topic',
   });
   return j.results.map(normalize);
 }

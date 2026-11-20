@@ -2,48 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Rhizome · paper graphs</title>
   <meta name="description" content="Free, open-source explorer that maps the papers related to any paper, using co-citation and bibliographic coupling on OpenAlex data.">
+  <meta name="theme-color" content="#2f6f5e">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cg stroke='%233f8f7a' stroke-width='2.4' fill='none'%3E%3Cpath d='M16 6v20M16 14l-8 6M16 18l8 5M16 10l7-3'/%3E%3C/g%3E%3Ccircle cx='16' cy='6' r='3.5' fill='%231d4e63'/%3E%3Ccircle cx='8' cy='20' r='3' fill='%239cc59a'/%3E%3Ccircle cx='24' cy='23' r='3' fill='%233f8f7a'/%3E%3Ccircle cx='23' cy='7' r='2.4' fill='%23e8b04b'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Inter:wght@400;500;600;700&display=swap">
+  <script>
+    // Apply the saved theme before first paint to avoid a flash.
+    try { const t = JSON.parse(localStorage.getItem('rhizome:theme')); if (t && t !== 'system') document.documentElement.dataset.theme = t; } catch {}
+  </script>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <a class="skip" href="#search-input">Skip to search</a>
   <header class="topbar">
-    <a class="brand" href="#" id="home-link" aria-label="Rhizome home">
+    <a class="brand" href="./" id="home-link" aria-label="Rhizome home">
       <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><g stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"><path d="M16 6v20M16 14l-8 6M16 18l8 5M16 10l7-3"/></g><circle cx="16" cy="6" r="3.5" class="b1"/><circle cx="8" cy="20" r="3" class="b2"/><circle cx="24" cy="23" r="3" class="b3"/><circle cx="23" cy="7" r="2.4" class="b4"/></svg>
       <span>Rhizome</span>
     </a>
     <form id="search-form" class="search" role="search">
       <input id="search-input" type="search" autocomplete="off" spellcheck="false"
-        placeholder="Paste a DOI, title, OpenAlex/Semantic Scholar id or link"
+        placeholder="Paste a DOI, title, OpenAlex id or Connected Papers link"
         aria-label="Paper to start from">
       <button type="submit" class="btn primary">Build graph</button>
     </form>
-    <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Settings">
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 3h-5l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>
-    </button>
+    <div class="top-actions">
+      <div class="menu-wrap">
+        <button id="theme-btn" class="icon-btn" aria-label="Colour theme" title="Colour theme" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.8-1.7h2.1A4.3 4.3 0 0 0 21 11c0-4.4-4-8-9-8Z"/><circle cx="7.5" cy="11" r="1.3" fill="currentColor"/><circle cx="10" cy="7" r="1.3" fill="currentColor"/><circle cx="14.5" cy="7" r="1.3" fill="currentColor"/><circle cx="17" cy="11" r="1.3" fill="currentColor"/></svg>
+        </button>
+        <div id="theme-menu" class="menu" role="menu" hidden></div>
+      </div>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 3h-5l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>
+      </button>
+    </div>
   </header>
 
   <main id="landing" class="landing">
     <section class="hero">
-      <h1>See the literature around any paper.</h1>
-      <p>Rhizome maps the papers most similar to the one you start from, using shared references
-        (bibliographic coupling) and shared citers (co-citation). Papers that sit close together
-        are closely related, even when they never cite each other.</p>
-      <ul class="facts">
-        <li><b>Free and open source.</b> No account, no paywall, MIT licence.</li>
-        <li><b>Open data.</b> Built on <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a>, 250M+ works, CC0.</li>
-        <li><b>Fits your reference manager.</b> Export any list to BibTeX, RIS or CSV for Zotero, Mendeley or EndNote.</li>
-      </ul>
-      <div class="examples">
-        <span>Try:</span>
-        <button class="chip" data-q="10.1093/pcp/pcac057">Sorghum awn inhibitor (DAI), 2022</button>
-        <button class="chip" data-q="10.1126/science.1225829">CRISPR-Cas9, 2012</button>
-        <button class="chip" data-q="10.1093/genetics/157.4.1819">Genomic selection, 2001</button>
+      <div class="hero-text">
+        <p class="eyebrow">Free and open source literature mapping</p>
+        <h1>See the literature growing around any paper.</h1>
+        <p class="lede">Start from one paper. Rhizome finds the papers that share its references and its readers, and lays them out so that related work sits together, even when the papers never cite each other.</p>
+        <div class="examples">
+          <span>Try one:</span>
+          <button class="chip" data-q="10.1093/pcp/pcac057">Sorghum awn inhibitor, 2022</button>
+          <button class="chip" data-q="10.1093/genetics/157.4.1819">Genomic selection, 2001</button>
+          <button class="chip" data-q="10.1126/science.1225829">CRISPR-Cas9, 2012</button>
+        </div>
       </div>
+      <svg class="hero-art" viewBox="0 0 320 240" aria-hidden="true">
+        <g class="ha-links"><path d="M160 120 L90 70 M160 120 L230 60 M160 120 L250 150 M160 120 L110 180 M160 120 L60 130 M90 70 L60 130 M230 60 L280 95 M250 150 L280 95 M110 180 L190 200 M250 150 L190 200 M90 70 L130 35 M230 60 L180 30"/></g>
+        <circle cx="160" cy="120" r="16" class="ha-origin"/>
+        <circle cx="90" cy="70" r="11" class="ha-a"/><circle cx="230" cy="60" r="9" class="ha-b"/>
+        <circle cx="250" cy="150" r="13" class="ha-c"/><circle cx="110" cy="180" r="8" class="ha-d"/>
+        <circle cx="60" cy="130" r="6" class="ha-a"/><circle cx="280" cy="95" r="6" class="ha-d"/>
+        <circle cx="190" cy="200" r="7" class="ha-b"/><circle cx="130" cy="35" r="5" class="ha-c"/><circle cx="180" cy="30" r="6" class="ha-a"/>
+      </svg>
     </section>
     <section id="search-results" class="results" hidden aria-live="polite"></section>
+    <section id="recent" class="recent" hidden>
+      <h2>Your recent graphs</h2>
+      <div class="recent-grid" id="recent-grid"></div>
+    </section>
+    <section class="how">
+      <div><h3>Shared references</h3><p>Two papers that cite the same work are probably about the same problem (bibliographic coupling).</p></div>
+      <div><h3>Shared readers</h3><p>Two papers that are cited together by later work are probably related (co-citation).</p></div>
+      <div><h3>Into your library</h3><p>Star the papers you want and export them to Zotero, Mendeley or EndNote as BibTeX or RIS.</p></div>
+    </section>
   </main>
 
   <main id="workspace" class="workspace" hidden>
@@ -51,11 +81,12 @@
       <div class="origin-card" id="origin-card"></div>
       <div class="tabs" role="tablist">
         <button role="tab" class="tab active" data-tab="graph" aria-selected="true">Graph <span class="count" id="count-graph"></span></button>
-        <button role="tab" class="tab" data-tab="prior" aria-selected="false">Prior works <span class="count" id="count-prior"></span></button>
-        <button role="tab" class="tab" data-tab="derivative" aria-selected="false">Derivative works <span class="count" id="count-derivative"></span></button>
+        <button role="tab" class="tab" data-tab="prior" aria-selected="false">Prior <span class="count" id="count-prior"></span></button>
+        <button role="tab" class="tab" data-tab="derivative" aria-selected="false">Derivative <span class="count" id="count-derivative"></span></button>
+        <button role="tab" class="tab" data-tab="saved" aria-selected="false">★ Saved <span class="count" id="count-saved"></span></button>
       </div>
       <div class="list-tools">
-        <input id="filter-input" type="search" placeholder="Filter by title, author, venue" aria-label="Filter list">
+        <input id="filter-input" type="search" placeholder="Find in list and graph" aria-label="Filter list">
         <select id="sort-select" aria-label="Sort list">
           <option value="sim">Most similar</option>
           <option value="cites">Most cited</option>
@@ -66,7 +97,7 @@
       <p class="tab-help" id="tab-help"></p>
       <ol class="paper-list" id="paper-list"></ol>
       <div class="export-bar">
-        <span>Export list</span>
+        <span id="export-label">Export list</span>
         <button class="btn small" data-export="bib">BibTeX</button>
         <button class="btn small" data-export="ris">RIS</button>
         <button class="btn small" data-export="csv">CSV</button>
@@ -74,18 +105,47 @@
     </aside>
 
     <section class="graph-wrap" aria-label="Graph">
+      <div class="graph-toolbar" role="toolbar" aria-label="Graph options">
+        <div class="seg" role="group" aria-label="Colour by">
+          <span class="seg-label">Colour</span>
+          <button data-color="year" class="on">Year</button>
+          <button data-color="citations">Citations</button>
+          <button data-color="topic">Topic</button>
+        </div>
+        <div class="seg" role="group" aria-label="Layout">
+          <span class="seg-label">Layout</span>
+          <button data-layout="similarity" class="on">Similarity</button>
+          <button data-layout="timeline">Timeline</button>
+        </div>
+        <label class="toggle"><input type="checkbox" id="labels-toggle" checked> Labels</label>
+      </div>
+      <button class="panel-toggle left" id="toggle-left" aria-label="Hide paper lists" title="Hide paper lists ([)" aria-expanded="true">◀</button>
+      <button class="panel-toggle right" id="toggle-right" aria-label="Hide paper details" title="Hide paper details (])" aria-expanded="true">▶</button>
       <div id="graph" class="graph"></div>
       <div class="graph-controls">
         <button class="icon-btn" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
         <button class="icon-btn" id="zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
-        <button class="icon-btn" id="zoom-fit" aria-label="Fit graph" title="Fit to view">⤢</button>
-        <button class="icon-btn" id="save-svg" aria-label="Download graph as SVG" title="Download graph (SVG)">⇩</button>
+        <button class="icon-btn" id="zoom-fit" aria-label="Fit graph to view" title="Fit to view (F)">⤢</button>
+        <div class="menu-wrap">
+          <button class="icon-btn" id="download-btn" aria-label="Download graph" title="Download graph" aria-haspopup="true" aria-expanded="false">⇩</button>
+          <div class="menu right" id="download-menu" role="menu" hidden>
+            <button role="menuitem" data-dl="png">Image (PNG)</button>
+            <button role="menuitem" data-dl="svg">Vector (SVG)</button>
+            <button role="menuitem" data-dl="all-bib">All lists (BibTeX)</button>
+          </div>
+        </div>
+        <button class="icon-btn" id="share-btn" aria-label="Copy link to this graph" title="Copy link">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+        </button>
       </div>
       <div class="legend" id="legend"></div>
-      <div class="status" id="status" role="status" hidden><span class="spinner"></span><span id="status-text"></span></div>
+      <div class="status" id="status" role="status" hidden>
+        <span class="spinner"></span><span id="status-text"></span>
+        <ol class="steps" id="status-steps"></ol>
+      </div>
     </section>
 
-    <aside class="panel detail-panel" id="detail" aria-label="Paper details"></aside>
+    <aside class="panel detail-panel" id="detail" aria-label="Paper details" aria-live="polite"></aside>
   </main>
 
   <dialog id="settings">
@@ -104,12 +164,24 @@
       </label>
       <p class="hint">OpenAlex is free. Without a key, each network gets a small daily budget, enough for dozens of graphs. A <a href="https://openalex.org/settings/api" target="_blank" rel="noopener">free key</a> gives you ten times more. It is stored only in this browser.</p>
       <p class="hint" id="usage-line"></p>
-      <div class="dialog-actions"><button class="btn primary" value="save">Save</button></div>
+      <h3>Keyboard shortcuts</h3>
+      <dl class="keys">
+        <dt><kbd>/</kbd></dt><dd>Search for a paper</dd>
+        <dt><kbd>F</kbd></dt><dd>Fit graph to view</dd>
+        <dt><kbd>T</kbd></dt><dd>Switch similarity and timeline layout</dd>
+        <dt><kbd>S</kbd></dt><dd>Star or unstar the selected paper</dd>
+        <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Hide or show the left and right panels</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Clear selection</dd>
+      </dl>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" value="save">Save</button>
+      </div>
     </form>
   </dialog>
 
   <footer class="footer">
-    Data: <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0).
+    Data from <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a> (CC0) ·
     <a href="https://github.com/Israel-Tetteh/rhizome" target="_blank" rel="noopener">Source on GitHub</a> · MIT licence
   </footer>
 
