@@ -82,6 +82,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
       .on('tick', tick);
     svg.call(zoom.transform, d3.zoomIdentity);
     sim.on('end', () => fit());
+    setTimeout(() => fit(), 1500);
     select(selectedId && neighbours.has(selectedId) ? selectedId : null);
     return color;
   }

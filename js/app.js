@@ -141,7 +141,7 @@ async function loadGraph(id) {
     state.lists.graph = graph.nodes;
     renderLegend();
     setStatus('');
-    selectPaper(origin.id);
+    selectPaper(origin.id, { fromGraph: true }); // show its details without dimming the graph
     renderList();
     // fill the other two lists in the background
     priorWorks(graph).then((l) => { if (run === state.runId) { state.lists.prior = l; renderList(); } })
