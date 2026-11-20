@@ -745,10 +745,11 @@ $('#multi-file').addEventListener('change', async (e) => {
   if (entries > found) $('#multi-status').textContent += ` ${entries - found} of ${entries} entries had no DOI and were skipped.`;
   e.target.value = '';
 });
-$('#multi').addEventListener('close', async () => {
-  if ($('#multi').returnValue !== 'go') return;
+// Act on the submit itself: the dialog's close event can be delayed in background tabs.
+$('#multi form').addEventListener('submit', (e) => {
+  if (e.submitter?.value !== 'go') return;
   const { dois, ids } = idsFromText($('#multi-text').value);
-  await startFromMany(dois, ids);
+  startFromMany(dois, ids);
 });
 async function startFromMany(dois, ids) {
   const box = $('#search-results');
