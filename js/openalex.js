@@ -95,7 +95,12 @@ export async function searchWorks(query, n = 8) {
 
 /** Resolve a Semantic Scholar paper id / arXiv id to a DOI or title via the free S2 API. */
 export async function resolveViaSemanticScholar(s2ref) {
-  const res = await fetch(`https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(s2ref)}?fields=title,externalIds`);
+  let res;
+  try {
+    res = await fetch(`https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(s2ref)}?fields=title,externalIds`);
+  } catch {
+    throw new ApiError(0, 'Semantic Scholar is not answering right now (it limits free use). Paste the paper\'s DOI or title instead.');
+  }
   if (!res.ok) throw new ApiError(res.status, 'Semantic Scholar could not find that paper id.');
   const j = await res.json();
   return { doi: j.externalIds?.DOI || null, title: j.title || null };
