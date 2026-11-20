@@ -186,6 +186,7 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px sol
 /* workspace */
 .workspace {
   flex: 1; display: grid; grid-template-columns: minmax(290px, 370px) minmax(0, 1fr) minmax(290px, 370px);
+  grid-template-rows: minmax(0, 1fr);
   height: calc(100vh - 57px - 34px); min-height: 540px;
 }
 .panel { background: var(--surface); overflow: auto; min-width: 0; }
@@ -224,8 +225,11 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px sol
 .export-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
 .export-bar span { margin-right: auto; }
 
-.graph-wrap { position: relative; overflow: hidden; background: var(--bg); min-width: 0; }
-.graph, .graph-svg { width: 100%; height: 100%; display: block; }
+.graph-wrap { position: relative; overflow: hidden; background: var(--bg); min-width: 0; min-height: 0; }
+/* The graph fills its panel exactly. Absolute sizing stops the SVG from
+   sizing itself from its viewBox, which made the panel grow without end. */
+.graph { position: absolute; inset: 0; }
+.graph-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .graph-svg { cursor: grab; touch-action: none; }
 .graph-svg:active { cursor: grabbing; }
 .links line { stroke: var(--edge); transition: opacity .15s; }

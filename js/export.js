@@ -1,6 +1,6 @@
 // BibTeX and RIS export, both import directly into Zotero, Mendeley and EndNote.
 
-import { authorNames, venue, bareDoi, doiUrl } from './openalex.js?v=20261120c';
+import { authorNames, venue, bareDoi, doiUrl } from './openalex.js?v=20261120d';
 
 const splitName = (full) => {
   const parts = full.trim().split(/\s+/);

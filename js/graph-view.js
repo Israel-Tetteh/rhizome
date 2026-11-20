@@ -1,6 +1,6 @@
 // Interactive force-directed view of the similarity graph (d3, SVG).
 import * as d3 from 'https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm';
-import { shortLabel } from './openalex.js?v=20261120c';
+import { shortLabel } from './openalex.js?v=20261120d';
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const ramp = () => d3.interpolateRgbBasis([0, 1, 2, 3].map((i) => cssVar(`--ramp-${i}`) || '#888'));

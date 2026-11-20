@@ -1,10 +1,10 @@
 import {
   settings, usage, getWork, getWorksByIds, getWorksByDois, getAuthor, getAuthorWorks, searchWorks,
   resolveViaSemanticScholar, abstractFrom, authorNames, authorList, shortLabel, venue, doiUrl, ApiError,
-} from './openalex.js?v=20261120c';
-import { buildGraph, assembleGraph, priorWorks, derivativeWorks } from './graph-builder.js?v=20261120c';
-import { createGraphView, topicOf, MAP_METRICS } from './graph-view.js?v=20261120c';
-import { toBibTeX, toRIS, toCSV, download } from './export.js?v=20261120c';
+} from './openalex.js?v=20261120d';
+import { buildGraph, assembleGraph, priorWorks, derivativeWorks } from './graph-builder.js?v=20261120d';
+import { createGraphView, topicOf, MAP_METRICS } from './graph-view.js?v=20261120d';
+import { toBibTeX, toRIS, toCSV, download } from './export.js?v=20261120d';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
