@@ -186,7 +186,8 @@ dialog input, dialog select { padding: 8px; border: 1px solid var(--border); bor
   .brand { margin-right: auto; }
   .workspace { display: flex; flex-direction: column; height: auto; }
   .graph-wrap { order: 1; height: 62vh; min-height: 360px; }
-  .list-panel { order: 2; border-right: 0; border-top: 1px solid var(--border); height: 75vh; }
+  .list-panel { order: 2; border-right: 0; border-top: 1px solid var(--border); overflow: visible; }
+  .paper-list { flex: none; max-height: 60vh; }
   .legend { font-size: 11px; padding: 6px 8px; gap: 4px; }
   .legend .row:last-child { display: none; }
   .detail-panel { order: 3; max-height: none; }
