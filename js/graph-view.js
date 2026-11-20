@@ -198,7 +198,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
     const { width, height } = size();
     svg.attr('viewBox', [-width / 2, -height / 2, width, height]);
     const xs = data.nodes.map((n) => n.x), ys = data.nodes.map((n) => n.y);
-    const top = layout === 'timeline' ? 50 : 30;
+    const top = layout === 'timeline' ? 90 : 60; // leave room for the toolbar
     const [x0, x1, y0, y1] = [d3.min(xs) - 40, d3.max(xs) + 40, d3.min(ys) - top, d3.max(ys) + 40];
     const k = Math.min(2, 0.95 / Math.max((x1 - x0) / (width - pad), (y1 - y0) / (height - pad)));
     const t = d3.zoomIdentity.scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);

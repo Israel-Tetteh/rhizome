@@ -260,6 +260,8 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px sol
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--muted); display: grid; gap: 6px;
   max-width: min(360px, calc(100% - 64px));
 }
+.legend-head { display: flex; justify-content: space-between; gap: 12px; background: none; border: 0; padding: 0; cursor: pointer; font-size: 12px; color: var(--text); font-weight: 600; text-align: left; }
+.legend-head span { color: var(--muted); }
 .legend .ramp { width: 160px; height: 8px; border-radius: 4px; }
 .legend .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; }
 .legend .cats { display: grid; gap: 2px; }

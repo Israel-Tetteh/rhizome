@@ -26,6 +26,7 @@ const prefs = {
   labels: store.get('labels', true),
   hideLeft: store.get('hideLeft', false),
   hideRight: store.get('hideRight', false),
+  legendOpen: store.get('legendOpen', true),
 };
 const setPref = (k, v) => { prefs[k] = v; store.set(k, v); };
 
@@ -305,22 +306,23 @@ function renderOrigin() {
 function renderLegend() {
   const lg = view.legend();
   if (!lg) { $('#legend').innerHTML = ''; return; }
+  const head = `<button class="legend-head" aria-expanded="${prefs.legendOpen}">${esc(lg.title)}<span>${prefs.legendOpen ? '▾' : '▸'}</span></button>`;
+  if (!prefs.legendOpen) { $('#legend').innerHTML = head; return; }
   const footer = '<div class="row hide-sm"><span>Size: citations</span><span>Lines: similarity</span></div>';
   if (lg.type === 'ramp') {
     const stops = [0, 0.33, 0.66, 1].map((t) => lg.interp(t)).join(',');
-    $('#legend').innerHTML = `
-      <div class="row"><span>${esc(lg.title)}</span></div>
+    $('#legend').innerHTML = `${head}
       <div class="row"><span>${esc(lg.lo)}</span><span class="ramp" style="background:linear-gradient(90deg,${stops})"></span><span>${esc(lg.hi)}</span></div>${footer}`;
   } else {
-    $('#legend').innerHTML = `
-      <div class="row"><span>${esc(lg.title)}</span><span class="hide-sm">click to highlight</span></div>
+    $('#legend').innerHTML = `${head}
       <div class="cats">${lg.cats.map((c) => `
-        <button class="cat ${state.topicFocus === c.label ? 'on' : ''}" data-topic="${esc(c.label)}" ${c.other ? 'data-other="1"' : ''}>
+        <button class="cat ${state.topicFocus === c.label ? 'on' : ''}" data-topic="${esc(c.label)}" ${c.other ? 'data-other="1"' : ''} title="Highlight ${esc(c.label)}">
           <i style="background:${c.color}"></i><span>${esc(c.label)}</span><em>${c.count}</em>
         </button>`).join('')}</div>${footer}`;
   }
 }
 $('#legend').addEventListener('click', (e) => {
+  if (e.target.closest('.legend-head')) { setPref('legendOpen', !prefs.legendOpen); renderLegend(); return; }
   const b = e.target.closest('.cat');
   if (!b) return;
   const lg = view.legend();
