@@ -1,0 +1,12 @@
+{
+  "name": "rhizome",
+  "version": "0.1.0",
+  "description": "Free, open-source explorer that maps the papers related to any paper.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "test": "node --test tests/"
+  }
+}
