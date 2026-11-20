@@ -1,10 +1,10 @@
 import {
   settings, usage, getWork, getWorksByIds, getWorksByDois, getAuthor, getAuthorWorks, searchWorks,
   resolveViaSemanticScholar, abstractFrom, authorNames, authorList, shortLabel, venue, doiUrl, ApiError,
-} from './openalex.js?v=20261120b';
-import { buildGraph, assembleGraph, priorWorks, derivativeWorks } from './graph-builder.js?v=20261120b';
-import { createGraphView, topicOf, MAP_METRICS } from './graph-view.js?v=20261120b';
-import { toBibTeX, toRIS, toCSV, download } from './export.js?v=20261120b';
+} from './openalex.js?v=20261120c';
+import { buildGraph, assembleGraph, priorWorks, derivativeWorks } from './graph-builder.js?v=20261120c';
+import { createGraphView, topicOf, MAP_METRICS } from './graph-view.js?v=20261120c';
+import { toBibTeX, toRIS, toCSV, download } from './export.js?v=20261120c';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -335,8 +335,13 @@ function showGraph(graph, run = state.runId) {
   view.setColorMode(prefs.colorMode);
   view.setLabels(prefs.labels);
   view.setMapAxes({ x: prefs.mapX, y: prefs.mapY });
-  view.render(graph);
-  if (prefs.layout !== 'similarity') view.setLayout(prefs.layout);
+  try {
+    view.render(graph);
+    if (prefs.layout !== 'similarity') view.setLayout(prefs.layout);
+  } catch (err) {
+    console.error('Rhizome: drawing the graph failed', err);
+    toast('The graph could not be drawn. Press F to retry, or reload the page.');
+  }
   renderLegend();
   setStatus('');
   renderList();

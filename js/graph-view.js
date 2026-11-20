@@ -1,6 +1,6 @@
 // Interactive force-directed view of the similarity graph (d3, SVG).
 import * as d3 from 'https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm';
-import { shortLabel } from './openalex.js?v=20261120b';
+import { shortLabel } from './openalex.js?v=20261120c';
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const ramp = () => d3.interpolateRgbBasis([0, 1, 2, 3].map((i) => cssVar(`--ramp-${i}`) || '#888'));
@@ -74,7 +74,11 @@ export function createGraphView(container, { onSelect, onOpen }) {
   let colorMode = 'year', layout = 'similarity', showLabels = true, colorer = null;
   let mapAxes = { x: 'year', y: 'citations' }, mapBox = null;
 
-  const zoom = d3.zoom().scaleExtent([0.15, 8]).on('zoom', (e) => root.attr('transform', e.transform));
+  let userMoved = false; // true once the reader pans or zooms by hand
+  const zoom = d3.zoom().scaleExtent([0.15, 8]).on('zoom', (e) => {
+    root.attr('transform', e.transform);
+    if (e.sourceEvent) userMoved = true;
+  });
   svg.call(zoom).on('dblclick.zoom', null);
   svg.on('click', (e) => { if (e.target === svg.node()) { select(null); onSelect?.(null); } });
 
@@ -85,6 +89,8 @@ export function createGraphView(container, { onSelect, onOpen }) {
 
   function render(graph) {
     data = graph;
+    hoverId = null; // the pointer may have been over a node of the previous graph
+    userMoved = false;
     const { width, height } = size();
     svg.attr('viewBox', [-width / 2, -height / 2, width, height]);
     const maxC = d3.max(graph.nodes, (n) => n.cited_by_count || 0) || 1;
@@ -143,6 +149,9 @@ export function createGraphView(container, { onSelect, onOpen }) {
     highlightSet = null;
     selectedId = selectedId && neighbours.has(selectedId) ? selectedId : null;
     emphasise();
+    // Frame again once the browser has laid the page out, in case the panel
+    // was still settling when the graph was drawn.
+    requestAnimationFrame(() => requestAnimationFrame(() => { if (data === graph && !userMoved) fit(40, 0); }));
   }
 
   const soleOrigin = () => { const o = data?.nodes.filter((n) => n.isOrigin) || []; return o.length === 1 ? o[0] : null; };
@@ -268,7 +277,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
     else svg.call(zoom.transform, t);
   }
 
-  const zoomBy = (f) => svg.transition().duration(250).call(zoom.scaleBy, f);
+  const zoomBy = (f) => { userMoved = true; svg.transition().duration(250).call(zoom.scaleBy, f); };
 
   /** Self-contained SVG with the current theme's colours baked in. */
   function exportSVG() {
@@ -306,9 +315,16 @@ export function createGraphView(container, { onSelect, onOpen }) {
     });
   }
 
+  // Keep the graph framed when the panel changes size (window resize, panels
+  // opening), unless the reader has panned or zoomed by hand.
+  let lastSize = '';
   new ResizeObserver(() => {
     const { width, height } = size();
+    const key = `${Math.round(width)}x${Math.round(height)}`;
+    if (key === lastSize) return;
+    lastSize = key;
     svg.attr('viewBox', [-width / 2, -height / 2, width, height]);
+    if (data && !userMoved && width > 50 && height > 50) fit(40, 0);
   }).observe(container);
 
   return {
