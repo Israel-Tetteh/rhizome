@@ -60,6 +60,11 @@
           <button class="chip" data-q="10.1093/genetics/157.4.1819">Genomic selection, 2001</button>
           <button class="chip" data-q="10.1126/science.1225829">CRISPR-Cas9, 2012</button>
         </div>
+        <button class="btn multi-open" id="multi-open" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="8" r="3"/><circle cx="17" cy="8" r="3"/><circle cx="12" cy="17" r="3"/><path d="M9.5 9.8 11 14.4M14.5 9.8 13 14.4M10 8h4"/></g></svg>
+          Start from several papers
+          <small>Paste DOIs, import from Zotero, or use your saved papers</small>
+        </button>
       </div>
       <svg class="hero-art" viewBox="0 0 320 240" aria-hidden="true">
         <g class="ha-links"><path d="M160 120 L90 70 M160 120 L230 60 M160 120 L250 150 M160 120 L110 180 M160 120 L60 130 M90 70 L60 130 M230 60 L280 95 M250 150 L280 95 M110 180 L190 200 M250 150 L190 200 M90 70 L130 35 M230 60 L180 30"/></g>
@@ -84,6 +89,7 @@
 
   <main id="workspace" class="workspace" hidden>
     <aside class="panel list-panel" aria-label="Paper lists">
+      <nav class="trail" id="trail" aria-label="Graphs you visited" hidden></nav>
       <div class="origin-card" id="origin-card"></div>
       <div class="tabs" role="tablist">
         <button role="tab" class="tab active" data-tab="graph" aria-selected="true">Graph <span class="count" id="count-graph"></span></button>
@@ -100,7 +106,22 @@
           <option value="old">Oldest</option>
         </select>
       </div>
+      <details class="filters" id="filters">
+        <summary>Filters <span id="filter-summary"></span></summary>
+        <div class="filter-row">
+          <label>Years <input id="year-from" type="number" inputmode="numeric" placeholder="from" aria-label="From year"></label>
+          <span>to</span>
+          <input id="year-to" type="number" inputmode="numeric" placeholder="to" aria-label="To year">
+        </div>
+        <label class="filter-row check"><input type="checkbox" id="oa-only"> Free full text only</label>
+        <div class="filter-row hidden-row" id="hidden-row" hidden>
+          <span id="hidden-count"></span>
+          <button class="btn small" id="unhide-all" type="button">Show them again</button>
+        </div>
+        <button class="linkish" id="clear-filters" type="button">Clear filters</button>
+      </details>
       <p class="tab-help" id="tab-help"></p>
+      <button class="btn small accent build-saved" id="build-saved" type="button" hidden>Build a graph from your saved papers</button>
       <ol class="paper-list" id="paper-list"></ol>
       <div class="export-bar">
         <span id="export-label">Export list</span>
@@ -122,6 +143,11 @@
           <span class="seg-label">Layout</span>
           <button data-layout="similarity" class="on">Similarity</button>
           <button data-layout="timeline">Timeline</button>
+          <button data-layout="map">Map</button>
+        </div>
+        <div class="seg axes" id="map-axes" role="group" aria-label="Map axes" hidden>
+          <label><span class="seg-label">X</span><select id="map-x" aria-label="Horizontal axis"></select></label>
+          <label><span class="seg-label">Y</span><select id="map-y" aria-label="Vertical axis"></select></label>
         </div>
         <label class="toggle"><input type="checkbox" id="labels-toggle" checked> Labels</label>
       </div>
@@ -154,6 +180,33 @@
     <aside class="panel detail-panel" id="detail" aria-label="Paper details" aria-live="polite"></aside>
   </main>
 
+  <dialog id="multi" class="wide">
+    <form method="dialog">
+      <h2>Start from several papers</h2>
+      <p class="hint">Rhizome finds the papers most related to the whole set, so a handful of papers you already know gives a sharper map of your topic than any single one.</p>
+      <label>DOIs, OpenAlex ids or links, one per line
+        <textarea id="multi-text" rows="6" spellcheck="false" placeholder="10.1093/pcp/pcac057&#10;10.1186/s12870-020-02555-6&#10;https://openalex.org/W2964044287"></textarea>
+      </label>
+      <div class="multi-sources">
+        <label class="btn small file-btn">Import .bib or .ris file
+          <input id="multi-file" type="file" accept=".bib,.ris,.txt,.nbib,.enw,.csv" multiple hidden>
+        </label>
+        <button class="btn small" id="multi-saved" type="button">Add my saved papers</button>
+      </div>
+      <p class="hint">In Zotero: select papers, right click, Export Items, then choose BibTeX or RIS. Entries without a DOI are skipped. Up to 25 papers.</p>
+      <p class="hint" id="multi-status" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" id="multi-go" value="go">Build graph</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="author" class="wide">
+    <div id="author-body"></div>
+    <form method="dialog" class="dialog-actions"><button class="btn">Close</button></form>
+  </dialog>
+
   <dialog id="settings">
     <form method="dialog">
       <h2>Settings</h2>
@@ -175,6 +228,8 @@
         <dt><kbd>/</kbd></dt><dd>Search for a paper</dd>
         <dt><kbd>F</kbd></dt><dd>Fit graph to view</dd>
         <dt><kbd>T</kbd></dt><dd>Switch similarity and timeline layout</dd>
+        <dt><kbd>M</kbd></dt><dd>Map layout (choose the axes)</dd>
+        <dt><kbd>H</kbd></dt><dd>Hide the selected paper from the graph</dd>
         <dt><kbd>S</kbd></dt><dd>Star or unstar the selected paper</dd>
         <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Hide or show the left and right panels</dd>
         <dt><kbd>Esc</kbd></dt><dd>Clear selection</dd>

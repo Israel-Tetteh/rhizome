@@ -85,6 +85,30 @@ export async function getCitingWorks(ids, { pages = 2, select = WORK_FIELDS } = 
   return [first, ...rest].flatMap((j) => j.results.map(normalize));
 }
 
+/** Fetch works by DOI (bare or URL form), 50 per call. Unknown DOIs are simply missing. */
+export async function getWorksByDois(dois) {
+  const unique = [...new Set(dois.map((d) => d.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '').toLowerCase()))].filter(Boolean);
+  const chunks = [];
+  for (let i = 0; i < unique.length; i += 50) chunks.push(unique.slice(i, i + 50));
+  const pages = await Promise.all(chunks.map((chunk) =>
+    get('/works', { filter: `doi:${chunk.map((d) => 'https://doi.org/' + d).join('|')}`, per_page: 100, select: WORK_FIELDS })));
+  return pages.flatMap((j) => j.results.map(normalize));
+}
+
+/** An author's profile. Single lookups are free. */
+export async function getAuthor(id) {
+  const a = await get(`/authors/${encodeURI(shortId(id))}`, {
+    select: 'id,display_name,orcid,works_count,cited_by_count,summary_stats,last_known_institutions,topics',
+  });
+  return { ...a, id: shortId(a.id) };
+}
+
+/** An author's works, most cited or newest first. */
+export async function getAuthorWorks(id, { sort = 'cited_by_count:desc', n = 50 } = {}) {
+  const j = await get('/works', { filter: `authorships.author.id:${shortId(id)}`, sort, per_page: n, select: WORK_FIELDS });
+  return j.results.map(normalize);
+}
+
 export async function searchWorks(query, n = 8) {
   const j = await get('/works', {
     search: query, per_page: n,
@@ -123,6 +147,11 @@ export function abstractFrom(inv) {
   for (const [word, positions] of Object.entries(inv)) for (const p of positions) words[p] = word;
   return words.filter(Boolean).join(' ');
 }
+
+/** Authors with their OpenAlex ids (when known), for linking to author pages. */
+export const authorList = (w) => (w.authorships || [])
+  .map((a) => ({ id: a.author?.id ? shortId(a.author.id) : null, name: a.author?.display_name || a.raw_author_name }))
+  .filter((a) => a.name);
 
 export const authorNames = (w) => (w.authorships || []).map((a) => a.author?.display_name || a.raw_author_name).filter(Boolean);
 

@@ -1,4 +1,4 @@
-// Builds a similarity graph around one origin paper.
+// Builds a similarity graph around one or more origin papers.
 //
 // Similarity between two papers combines two classic bibliometric signals:
 //   • bibliographic coupling: how many references they share
@@ -17,33 +17,43 @@ const EDGES_PER_NODE = 5;
 const SIBLING_SEED_REFS = 50; // most specific origin references used to find siblings
 const SIBLING_PAGES = 3;      // up to 300 papers citing those references
 
-export async function buildGraph(origin, { size = 40, onProgress = () => {} } = {}) {
+/**
+ * Build a graph around one or more origin papers.
+ * @param {object|object[]} originOrOrigins  full OpenAlex work(s), with referenced_works
+ * @param {{size?:number, exclude?:Set<string>, onProgress?:Function}} opts
+ */
+export async function buildGraph(originOrOrigins, { size = 40, exclude = new Set(), onProgress = () => {} } = {}) {
+  const origins = Array.isArray(originOrOrigins) ? originOrOrigins : [originOrOrigins];
+  const originIds = new Set(origins.map((o) => o.id));
   const docs = new Map(); // id -> work
   const add = (w) => { if (w && w.id && !docs.has(w.id)) docs.set(w.id, w); };
-  add(origin);
+  origins.forEach(add);
+  const allRefs = [...new Set(origins.flatMap((o) => o.referenced_works))];
+  const refLimit = origins.length > 1 ? REF_LIMIT + 100 : REF_LIMIT;
 
-  onProgress('Fetching references and citing papers…');
-  const [refs, citers, related] = await Promise.all([
-    getWorksByIds(origin.referenced_works.slice(0, REF_LIMIT)),
-    getCitingWorks([origin.id], { pages: CITER_PAGES }),
-    origin.related_works?.length ? getWorksByIds(origin.related_works) : [],
+  onProgress(origins.length > 1 ? `Fetching references and citing papers of ${origins.length} papers…` : 'Fetching references and citing papers…');
+  const related = [...new Set(origins.flatMap((o) => o.related_works || []))].slice(0, 40);
+  const [refs, citers, rel] = await Promise.all([
+    getWorksByIds(allRefs.slice(0, refLimit)),
+    getCitingWorks([...originIds], { pages: CITER_PAGES }),
+    related.length ? getWorksByIds(related) : [],
   ]);
-  [...refs, ...citers, ...related].forEach(add);
+  [...refs, ...citers, ...rel].forEach(add);
 
-  // Siblings: papers that cite the origin's most specific references (the
-  // least-cited ones) are likely to share many references with the origin,
-  // even if they never cite it. Highly cited classics are skipped because
-  // almost everything in a field cites them.
-  const specificRefs = origin.referenced_works.map((id) => docs.get(id)).filter(Boolean)
+  // Siblings: papers that cite the origins' most specific references (the
+  // least-cited ones) are likely to share many references with them, even if
+  // they never cite them. Highly cited classics are skipped because almost
+  // everything in a field cites them.
+  const specificRefs = allRefs.map((id) => docs.get(id)).filter(Boolean)
     .sort((a, b) => (a.cited_by_count || 0) - (b.cited_by_count || 0))
     .slice(0, SIBLING_SEED_REFS).map((w) => w.id);
   if (specificRefs.length) {
-    onProgress('Finding papers that share its references…');
+    onProgress('Finding papers that share their references…');
     (await getCitingWorks(specificRefs, { pages: SIBLING_PAGES })).forEach(add);
   }
 
   // Expand the pool with papers that the neighbourhood cites repeatedly:
-  // they are strongly co-cited with the origin's field.
+  // they are strongly co-cited with the origins' field.
   const freq = new Map();
   for (const d of docs.values()) {
     for (const r of d.referenced_works) if (!docs.has(r)) freq.set(r, (freq.get(r) || 0) + 1);
@@ -56,6 +66,12 @@ export async function buildGraph(origin, { size = 40, onProgress = () => {} } = 
   }
 
   onProgress('Computing similarity…');
+  return assembleGraph(origins, docs, { size, exclude });
+}
+
+/** Score, select and link papers from an already collected corpus (no network). */
+export function assembleGraph(origins, docs, { size = 40, exclude = new Set() } = {}) {
+  const originIds = new Set(origins.map((o) => o.id));
   const refSets = new Map();
   const citedBy = new Map(); // id -> Set of corpus docs citing it
   for (const d of docs.values()) {
@@ -68,14 +84,19 @@ export async function buildGraph(origin, { size = 40, onProgress = () => {} } = 
   }
 
   const sim = makeSimilarity(refSets, citedBy);
+  // With several origins, a paper related to many of them scores higher.
+  const score = (id) => origins.reduce((t, o) => t + sim(o.id, id), 0);
 
-  const candidates = [...docs.values()].filter((d) => d.id !== origin.id)
-    .map((d) => ({ d, s: sim(origin.id, d.id) }))
+  const candidates = [...docs.values()].filter((d) => !originIds.has(d.id) && !exclude.has(d.id))
+    .map((d) => ({ d, s: score(d.id) }))
     .filter((x) => x.s > 0)
     .sort((a, b) => b.s - a.s || (b.d.cited_by_count || 0) - (a.d.cited_by_count || 0))
-    .slice(0, size - 1);
+    .slice(0, Math.max(size - origins.length, 5));
 
-  const nodes = [{ ...origin, simToOrigin: 1, isOrigin: true }, ...candidates.map(({ d, s }) => ({ ...d, simToOrigin: s }))];
+  const nodes = [
+    ...origins.map((o) => ({ ...o, simToOrigin: Infinity, isOrigin: true })),
+    ...candidates.map(({ d, s }) => ({ ...d, simToOrigin: s })),
+  ];
 
   // Pairwise similarities among the chosen nodes; keep each node's strongest links.
   const pairs = [];
@@ -91,11 +112,18 @@ export async function buildGraph(origin, { size = 40, onProgress = () => {} } = 
   byNode.forEach((list) => list.sort((a, b) => b.w - a.w).slice(0, EDGES_PER_NODE).forEach((p) => keep.add(p)));
   const links = [...keep].map((p) => ({ source: nodes[p.i].id, target: nodes[p.j].id, weight: p.w }));
 
-  // normalise similarity to origin to 0..1 for display (origin excluded)
+  // normalise similarity to 0..1 for display; count connections for the map view
   const maxS = Math.max(...candidates.map((c) => c.s), 1e-9);
-  nodes.forEach((n) => { if (!n.isOrigin) n.simPct = n.simToOrigin / maxS; else n.simPct = 1; });
+  const degree = new Map();
+  links.forEach((l) => { degree.set(l.source, (degree.get(l.source) || 0) + 1); degree.set(l.target, (degree.get(l.target) || 0) + 1); });
+  nodes.forEach((n) => {
+    n.simPct = n.isOrigin ? 1 : n.simToOrigin / maxS;
+    n.degree = degree.get(n.id) || 0;
+  });
 
-  return { nodes, links, corpus: docs, corpusSize: docs.size };
+  // `pool` stays exactly as collected, so rebuilding (e.g. after hiding a paper) is repeatable;
+  // `corpus` also gathers papers fetched later for the prior/derivative lists.
+  return { nodes, links, pool: docs, corpus: new Map(docs), corpusSize: docs.size, origins };
 }
 
 function makeSimilarity(refSets, citedBy) {

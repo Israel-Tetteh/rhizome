@@ -36,6 +36,31 @@ export function makeColorer(nodes, mode) {
   return { color, legend: { type: 'ramp', title: 'Colour: year', lo, hi, interp } };
 }
 
+/** Axis choices for the map layout. `log` axes use citation-style log scales. */
+export const MAP_METRICS = {
+  year: { label: 'Year', get: (n) => n.publication_year, log: false },
+  citations: { label: 'Citations', get: (n) => n.cited_by_count || 0, log: true },
+  references: { label: 'References', get: (n) => n.referenced_works?.length || 0, log: true },
+  similarity: { label: 'Similarity', get: (n) => (n.isOrigin ? 1 : n.simPct || 0), log: false },
+  connections: { label: 'Connections', get: (n) => n.degree || 0, log: false },
+};
+
+function metricScale(nodes, key, range) {
+  const m = MAP_METRICS[key] || MAP_METRICS.year;
+  const vals = nodes.map(m.get).filter((v) => v !== undefined && v !== null);
+  const hi = d3.max(vals) ?? 1;
+  if (m.log) {
+    const s = d3.scaleLog().domain([1, hi + 1]).range(range).clamp(true);
+    const ticks = [0, 1, 10, 100, 1000, 10000, 100000, 1000000].filter((t) => t <= hi * 1.05);
+    return { pos: (n) => s((m.get(n) || 0) + 1), at: (t) => s(t + 1), ticks, fmt: (t) => (t >= 1000 ? `${t / 1000}k` : String(t)), label: m.label };
+  }
+  const s = d3.scaleLinear().domain(d3.extent(vals).map((v, i) => v ?? i)).nice().range(range);
+  if (s.domain()[0] === s.domain()[1]) s.domain([s.domain()[0] - 1, s.domain()[1] + 1]);
+  const ticks = s.ticks(6).filter((t) => key !== 'year' && key !== 'connections' ? true : Number.isInteger(t));
+  const fmt = key === 'similarity' ? (t) => `${Math.round(t * 100)}%` : (t) => String(t);
+  return { pos: (n) => { const v = m.get(n); return v === undefined || v === null ? range[0] : s(v); }, at: s, ticks, fmt, label: m.label };
+}
+
 export function createGraphView(container, { onSelect, onOpen }) {
   const svg = d3.select(container).append('svg').attr('class', 'graph-svg').attr('role', 'img')
     .attr('aria-label', 'Graph of related papers');
@@ -47,6 +72,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
   let sim, nodeSel, linkSel, labelSel, data, selectedId = null, hoverId = null, highlightSet = null;
   let neighbours = new Map();
   let colorMode = 'year', layout = 'similarity', showLabels = true, colorer = null;
+  let mapAxes = { x: 'year', y: 'citations' }, mapBox = null;
 
   const zoom = d3.zoom().scaleExtent([0.15, 8]).on('zoom', (e) => root.attr('transform', e.transform));
   svg.call(zoom).on('dblclick.zoom', null);
@@ -89,7 +115,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
       .call(d3.drag()
         .on('start', (e, n) => { if (!e.active) sim.alphaTarget(0.2).restart(); n.fx = n.x; n.fy = n.y; })
         .on('drag', (e, n) => { n.fx = e.x; n.fy = e.y; })
-        .on('end', (e, n) => { if (!e.active) sim.alphaTarget(0); if (!n.isOrigin || layout === 'timeline') { n.fx = null; n.fy = null; } }));
+        .on('end', (e, n) => { if (!e.active) sim.alphaTarget(0); if (!(n.isOrigin && layout === 'similarity' && soleOrigin())) { n.fx = null; n.fy = null; } }));
     nodeSel.selectAll('title').data((n) => [n]).join('title').text((n) => `${n.title}\n${shortLabel(n)} · ${n.cited_by_count ?? 0} citations`);
 
     labelSel = labelG.selectAll('text').data(graph.nodes, (n) => n.id).join('text')
@@ -119,27 +145,61 @@ export function createGraphView(container, { onSelect, onOpen }) {
     emphasise();
   }
 
+  const soleOrigin = () => { const o = data?.nodes.filter((n) => n.isOrigin) || []; return o.length === 1 ? o[0] : null; };
+
   function applyLayout() {
     if (!sim || !data) return;
-    const { width } = size();
-    const origin = data.nodes.find((n) => n.isOrigin);
+    const { width, height } = size();
+    data.nodes.forEach((n) => { if (n.isOrigin) { n.fx = null; n.fy = null; } });
     axisG.selectAll('*').remove();
+    axisG.attr('data-mode', layout);
+    mapBox = null;
     if (layout === 'timeline') {
       const years = data.nodes.map((n) => n.publication_year).filter(Boolean);
       const x = d3.scaleLinear().domain(d3.extent(years)).nice().range([-width * 0.42, width * 0.42]);
-      if (origin) { origin.fx = null; origin.fy = null; }
       sim.force('x', d3.forceX((n) => (n.publication_year ? x(n.publication_year) : 0)).strength(0.9))
         .force('y', d3.forceY(0).strength(0.06))
         .force('charge', d3.forceManyBody().strength(-60));
       const ticks = x.ticks(Math.min(10, Math.max(2, Math.round(width / 90)))).filter(Number.isInteger);
       axisG.selectAll('line').data(ticks).join('line').attr('x1', (t) => x(t)).attr('x2', (t) => x(t));
       axisG.selectAll('text').data(ticks).join('text').attr('x', (t) => x(t)).attr('class', 'tick').text((t) => t);
+    } else if (layout === 'map') {
+      // Scatter on two chosen measures (like a Litmaps map): position carries meaning,
+      // a little collision keeps overlapping papers readable.
+      const w = Math.max(320, width * 0.8), h = Math.max(240, height * 0.7);
+      const x = metricScale(data.nodes, mapAxes.x, [-w / 2, w / 2]);
+      const y = metricScale(data.nodes, mapAxes.y, [h / 2, -h / 2]);
+      mapBox = { x0: -w / 2, x1: w / 2, y0: -h / 2, y1: h / 2 };
+      sim.force('x', d3.forceX(x.pos).strength(1))
+        .force('y', d3.forceY(y.pos).strength(1))
+        .force('charge', d3.forceManyBody().strength(-8));
+      sim.force('link').strength(0);
+      const g = axisG.append('g').attr('class', 'map-axes');
+      g.selectAll('line.gx').data(x.ticks).join('line').attr('class', 'gx')
+        .attr('x1', x.at).attr('x2', x.at).attr('y1', -h / 2 - 10).attr('y2', h / 2 + 10);
+      g.selectAll('line.gy').data(y.ticks).join('line').attr('class', 'gy')
+        .attr('y1', y.at).attr('y2', y.at).attr('x1', -w / 2 - 10).attr('x2', w / 2 + 10);
+      g.selectAll('text.tx').data(x.ticks).join('text').attr('class', 'tick tx')
+        .attr('x', x.at).attr('y', h / 2 + 28).text(x.fmt);
+      g.selectAll('text.ty').data(y.ticks).join('text').attr('class', 'tick ty')
+        .attr('y', (t) => y.at(t) + 4).attr('x', -w / 2 - 16).text(y.fmt);
+      g.append('text').attr('class', 'axis-title').attr('x', 0).attr('y', h / 2 + 50).text(`${x.label} →`);
+      g.append('text').attr('class', 'axis-title').attr('transform', `translate(${-w / 2 - 54},0) rotate(-90)`).text(`${y.label} →`);
+      return;
     } else {
-      if (origin) { origin.fx = 0; origin.fy = 0; }
+      const o = soleOrigin();
+      if (o) { o.fx = 0; o.fy = 0; }
       sim.force('x', d3.forceX().strength(0.04))
         .force('y', d3.forceY().strength(0.04))
         .force('charge', d3.forceManyBody().strength(-180));
     }
+    const maxW = d3.max(data.links, (l) => l.weight) || 1;
+    sim.force('link').strength((l) => 0.15 + 0.6 * (l.weight / maxW));
+  }
+
+  function setMapAxes(axes) {
+    mapAxes = { ...mapAxes, ...axes };
+    if (layout === 'map') setLayout('map');
   }
 
   function setLayout(mode) {
@@ -199,7 +259,9 @@ export function createGraphView(container, { onSelect, onOpen }) {
     svg.attr('viewBox', [-width / 2, -height / 2, width, height]);
     const xs = data.nodes.map((n) => n.x), ys = data.nodes.map((n) => n.y);
     const top = layout === 'timeline' ? 90 : 60; // leave room for the toolbar
-    const [x0, x1, y0, y1] = [d3.min(xs) - 40, d3.max(xs) + 40, d3.min(ys) - top, d3.max(ys) + 40];
+    const [x0, x1, y0, y1] = mapBox
+      ? [Math.min(mapBox.x0, d3.min(xs)) - 80, Math.max(mapBox.x1, d3.max(xs)) + 30, Math.min(mapBox.y0, d3.min(ys)) - 70, Math.max(mapBox.y1, d3.max(ys)) + 70]
+      : [d3.min(xs) - 40, d3.max(xs) + 40, d3.min(ys) - top, d3.max(ys) + 40];
     const k = Math.min(2, 0.95 / Math.max((x1 - x0) / (width - pad), (y1 - y0) / (height - pad)));
     const t = d3.zoomIdentity.scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
     if (duration) svg.transition().duration(duration).call(zoom.transform, t);
@@ -222,7 +284,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
       .label{font:10px sans-serif;fill:${cssVar('--muted')};text-anchor:middle;paint-order:stroke;stroke:${cssVar('--bg')};stroke-width:3px}
       .label.origin{font-weight:700;fill:${cssVar('--text')};font-size:11px}
       .labels[data-mode=focus] .label:not(.show):not(.origin){display:none}
-      .time-axis line{stroke:${cssVar('--border')};stroke-dasharray:2 4} .time-axis text{font:11px sans-serif;fill:${cssVar('--muted')};text-anchor:middle}</style>
+      .time-axis line{stroke:${cssVar('--border')};stroke-dasharray:2 4} .time-axis text{font:11px sans-serif;fill:${cssVar('--muted')};text-anchor:middle} .time-axis .ty{text-anchor:end} .time-axis .axis-title{font-weight:600;fill:${cssVar('--text')}}</style>
       <rect x="${-width / 2}" y="${-height / 2}" width="${width}" height="${height}" fill="${cssVar('--bg')}"/>`);
     return new XMLSerializer().serializeToString(clone);
   }
@@ -251,7 +313,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
 
   return {
     render, select, highlight, fit, zoomBy, exportSVG, exportPNG,
-    setColorMode, setLayout, setLabels, recolor,
+    setColorMode, setLayout, setMapAxes, setLabels, recolor,
     colorOf: (w) => (colorer ? colorer.color(w) : cssVar('--muted')),
     legend: () => colorer?.legend,
   };

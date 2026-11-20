@@ -1,9 +1,9 @@
 import {
-  settings, usage, getWork, searchWorks, resolveViaSemanticScholar, abstractFrom,
-  authorNames, shortLabel, venue, doiUrl, ApiError,
+  settings, usage, getWork, getWorksByIds, getWorksByDois, getAuthor, getAuthorWorks, searchWorks,
+  resolveViaSemanticScholar, abstractFrom, authorNames, authorList, shortLabel, venue, doiUrl, ApiError,
 } from './openalex.js';
-import { buildGraph, priorWorks, derivativeWorks } from './graph-builder.js';
-import { createGraphView, topicOf } from './graph-view.js';
+import { buildGraph, assembleGraph, priorWorks, derivativeWorks } from './graph-builder.js';
+import { createGraphView, topicOf, MAP_METRICS } from './graph-view.js';
 import { toBibTeX, toRIS, toCSV, download } from './export.js';
 
 const $ = (s) => document.querySelector(s);
@@ -27,7 +27,10 @@ const prefs = {
   hideLeft: store.get('hideLeft', false),
   hideRight: store.get('hideRight', false),
   legendOpen: store.get('legendOpen', true),
+  mapX: store.get('mapX', 'year'),
+  mapY: store.get('mapY', 'citations'),
 };
+const MAX_ORIGINS = 25;
 const setPref = (k, v) => { prefs[k] = v; store.set(k, v); };
 
 // Saved papers: kept as slim records so they survive across graphs and visits.
@@ -52,7 +55,9 @@ function toggleSaved(w) {
 
 // ---- state ----
 const state = {
-  origin: null, graph: null,
+  origin: null, origins: [], key: '', graph: null, exclude: new Set(),
+  filters: { from: null, to: null, oa: false },
+  trail: (() => { try { return JSON.parse(sessionStorage.getItem('rhizome:trail')) || []; } catch { return []; } })(),
   lists: { graph: [], prior: null, derivative: null },
   tab: 'graph', sort: 'sim', filter: '', selected: null, runId: 0, topicFocus: null,
 };
@@ -173,14 +178,18 @@ async function resolve(raw) {
 }
 
 // ---- routing: #/W123 makes graphs shareable ----
-function go(id) { location.hash = `#/${id}`; }
+// Several origins are joined with commas: #/W1,W2,W3
+function go(id) { location.hash = `#/${Array.isArray(id) ? id.join(',') : id}`; }
 window.addEventListener('hashchange', route);
 async function route() {
-  const m = location.hash.match(/^#\/(W\d+)/i);
+  const m = location.hash.match(/^#\/(W\d+(?:,W\d+)*)/i);
   if (!m) return showLanding();
-  if (state.graph?.nodes[0]?.id === m[1].toUpperCase()) return;
-  await loadGraph(m[1].toUpperCase());
+  const key = [...new Set(m[1].toUpperCase().split(','))].slice(0, MAX_ORIGINS).join(',');
+  if (state.graph && state.key === key) return;
+  await loadGraph(key);
 }
+const originLabel = (origins) => (origins.length === 1 ? stripTags(origins[0].title)
+  : `${origins.length} papers: ${origins.slice(0, 3).map((o) => shortLabel(o)).join('; ')}${origins.length > 3 ? '…' : ''}`);
 
 function showLanding() {
   $('#landing').hidden = false; $('#workspace').hidden = true;
@@ -189,10 +198,34 @@ function showLanding() {
 }
 
 // ---- recent graphs ----
-function remember(origin) {
-  const list = store.get('recent', []).filter((r) => r.id !== origin.id);
-  list.unshift({ id: origin.id, title: stripTags(origin.title), label: shortLabel(origin), venue: venue(origin), at: Date.now() });
+function remember(origins) {
+  const key = origins.map((o) => o.id).join(',');
+  const o = origins[0];
+  const list = store.get('recent', []).filter((r) => r.id !== key);
+  list.unshift(origins.length === 1
+    ? { id: key, title: stripTags(o.title), label: shortLabel(o), venue: venue(o), at: Date.now() }
+    : { id: key, title: `${origins.length} papers, starting with “${stripTags(o.title).slice(0, 70)}”`, label: origins.slice(0, 3).map(shortLabel).join('; '), venue: '', at: Date.now() });
   store.set('recent', list.slice(0, 9));
+}
+
+// ---- trail: the graphs visited this session, to hop back (kept per tab) ----
+function pushTrail(origins) {
+  const key = origins.map((o) => o.id).join(',');
+  const label = origins.length === 1 ? shortLabel(origins[0]) : `${shortLabel(origins[0])} +${origins.length - 1}`;
+  const at = state.trail.findIndex((t) => t.key === key);
+  if (at >= 0) state.trail = state.trail.slice(0, at + 1);
+  else state.trail.push({ key, label, title: originLabel(origins) });
+  state.trail = state.trail.slice(-12);
+  try { sessionStorage.setItem('rhizome:trail', JSON.stringify(state.trail)); } catch { /* ignore */ }
+  renderTrail();
+}
+function renderTrail() {
+  const el = $('#trail');
+  el.hidden = state.trail.length < 2;
+  el.innerHTML = state.trail.map((t, i) => (t.key === state.key
+    ? `<span class="here" aria-current="page" title="${esc(t.title)}">${esc(t.label)}</span>`
+    : `<a href="#/${esc(t.key)}" title="${esc(t.title)}">${esc(t.label)}</a>`) + (i < state.trail.length - 1 ? '<i aria-hidden="true">›</i>' : '')).join('');
+  el.scrollLeft = el.scrollWidth;
 }
 function renderRecent() {
   const list = store.get('recent', []);
@@ -248,44 +281,45 @@ function setStatus(text) {
   $('#status-steps').innerHTML = steps.map((s) => `<li>${esc(s)}</li>`).join('');
 }
 
-async function loadGraph(id) {
+async function loadGraph(key) {
   const run = ++state.runId;
+  const ids = key.split(',');
   $('#landing').hidden = true; $('#workspace').hidden = false;
   steps = []; $('#status-text').textContent = '';
-  setStatus('Fetching the paper…');
+  setStatus(ids.length > 1 ? `Fetching ${ids.length} papers…` : 'Fetching the paper…');
   state.lists = { graph: [], prior: null, derivative: null };
   state.selected = null; state.graph = null; state.topicFocus = null;
+  if (state.key !== key) state.exclude = new Set();
+  state.key = key;
   $('#filter-input').value = ''; state.filter = '';
   renderList(); renderDetail();
   try {
-    const origin = state.origin?.id === id && state.origin.referenced_works ? state.origin : await getWork(id);
+    let origins;
+    if (ids.length === 1) {
+      origins = [state.origin?.id === ids[0] && state.origin.referenced_works ? state.origin : await getWork(ids[0])];
+    } else {
+      const got = new Map((await getWorksByIds(ids)).map((w) => [w.id, w]));
+      origins = ids.map((id) => got.get(id)).filter(Boolean);
+      if (!origins.length) throw new ApiError(404, 'None of these papers were found in OpenAlex.');
+    }
     if (run !== state.runId) return;
-    state.origin = origin;
-    document.title = `${stripTags(origin.title).slice(0, 60)} · Rhizome`;
+    state.origins = origins;
+    state.origin = origins[0];
+    document.title = `${originLabel(origins).slice(0, 60)} · Rhizome`;
     renderOrigin();
-    $('#search-input').value = bareDoi(origin) || origin.id;
-    const graph = await buildGraph(origin, { size: prefs.size, onProgress: (t) => run === state.runId && setStatus(t) });
+    $('#search-input').value = origins.length === 1 ? (bareDoi(origins[0]) || origins[0].id) : '';
+    const graph = await buildGraph(origins, { size: prefs.size, exclude: state.exclude, onProgress: (t) => run === state.runId && setStatus(t) });
     if (run !== state.runId) return;
     if (graph.nodes.length < 2) {
       setStatus('');
-      $('#detail').innerHTML = `<p class="error">OpenAlex has too little citation data for this paper to build a graph (it lists ${origin.referenced_works.length} references and ${origin.cited_by_count ?? 0} citations). Try a related paper instead.</p>`;
+      const o = origins[0];
+      $('#detail').innerHTML = `<p class="error">OpenAlex has too little citation data for this paper to build a graph (it lists ${o.referenced_works.length} references and ${o.cited_by_count ?? 0} citations). Try a related paper instead.</p>`;
       return;
     }
-    state.graph = graph;
-    state.lists.graph = graph.nodes;
-    view.setColorMode(prefs.colorMode);
-    view.setLabels(prefs.labels);
-    view.render(graph);
-    if (prefs.layout !== 'similarity') view.setLayout(prefs.layout);
-    remember(origin);
-    renderLegend();
-    setStatus('');
-    selectPaper(origin.id, { fromGraph: true }); // show its details without dimming the graph
-    renderList();
-    priorWorks(graph).then((l) => { if (run === state.runId) { state.lists.prior = l; renderList(); } })
-      .catch((e) => { if (run === state.runId) { state.lists.prior = { error: e.message }; renderList(); } });
-    derivativeWorks(graph).then((l) => { if (run === state.runId) { state.lists.derivative = l; renderList(); } })
-      .catch((e) => { if (run === state.runId) { state.lists.derivative = { error: e.message }; renderList(); } });
+    remember(origins);
+    pushTrail(origins);
+    showGraph(graph, run);
+    selectPaper(origins.length === 1 ? origins[0].id : null, { fromGraph: true }); // show its details without dimming the graph
   } catch (err) {
     if (run !== state.runId) return;
     setStatus('');
@@ -294,14 +328,104 @@ async function loadGraph(id) {
   }
 }
 
+/** Draw a built graph and (re)compute the prior and derivative lists. */
+function showGraph(graph, run = state.runId) {
+  state.graph = graph;
+  state.lists = { graph: graph.nodes, prior: null, derivative: null };
+  view.setColorMode(prefs.colorMode);
+  view.setLabels(prefs.labels);
+  view.setMapAxes({ x: prefs.mapX, y: prefs.mapY });
+  view.render(graph);
+  if (prefs.layout !== 'similarity') view.setLayout(prefs.layout);
+  renderLegend();
+  setStatus('');
+  renderList();
+  applyFilters();
+  priorWorks(graph).then((l) => { if (run === state.runId) { state.lists.prior = l; renderList(); } })
+    .catch((e) => { if (run === state.runId) { state.lists.prior = { error: e.message }; renderList(); } });
+  derivativeWorks(graph).then((l) => { if (run === state.runId) { state.lists.derivative = l; renderList(); } })
+    .catch((e) => { if (run === state.runId) { state.lists.derivative = { error: e.message }; renderList(); } });
+}
+
+// ---- hiding papers: rebuilt locally from the papers already collected (no new searches) ----
+function rebuildLocal() {
+  if (!state.graph) return;
+  const run = ++state.runId;
+  const keepSel = state.selected;
+  showGraph(assembleGraph(state.graph.origins, state.graph.pool, { size: prefs.size, exclude: state.exclude }), run);
+  renderHidden();
+  selectPaper(keepSel && state.lists.graph.some((n) => n.id === keepSel) ? keepSel : null);
+}
+function hidePaper(id) {
+  if (!state.graph || state.origins.some((o) => o.id === id)) return;
+  state.exclude.add(id);
+  rebuildLocal();
+  toast('Hidden. A related paper took its place. Undo it in Filters');
+}
+function renderHidden() {
+  const n = state.exclude.size;
+  $('#hidden-row').hidden = !n;
+  $('#hidden-count').textContent = `${n} paper${n === 1 ? '' : 's'} hidden`;
+  updateFilterSummary();
+}
+$('#unhide-all').addEventListener('click', () => { state.exclude = new Set(); rebuildLocal(); });
+
+// ---- filters: year range and free full text; they narrow the lists and light up the graph ----
+const passesFilters = (w) => {
+  const { from, to, oa } = state.filters;
+  if (from && !(w.publication_year >= from)) return false;
+  if (to && !(w.publication_year <= to)) return false;
+  if (oa && !w.open_access?.oa_url) return false;
+  return true;
+};
+const filtersOn = () => !!(state.filters.from || state.filters.to || state.filters.oa);
+function updateFilterSummary() {
+  const f = state.filters, bits = [];
+  if (f.from || f.to) bits.push(`${f.from || '…'}–${f.to || '…'}`);
+  if (f.oa) bits.push('free');
+  if (state.exclude.size) bits.push(`${state.exclude.size} hidden`);
+  $('#filter-summary').textContent = bits.length ? `· ${bits.join(', ')}` : '';
+}
+function applyFilters() {
+  updateFilterSummary();
+  renderList();
+  if (!state.graph) return;
+  const f = state.filter.toLowerCase().trim();
+  state.topicFocus = null;
+  if (!f && !filtersOn()) { view.highlight(null); renderLegend(); return; }
+  const ids = new Set(state.lists.graph.filter((w) => passesFilters(w) && (!f || matches(w, f))).map((w) => w.id));
+  view.select(null);
+  view.highlight(ids.size ? ids : new Set(['none']));
+  renderLegend();
+}
+function readFilters() {
+  const n = (v) => (/^\d{4}$/.test(v.trim()) ? Number(v) : null);
+  state.filters = { from: n($('#year-from').value), to: n($('#year-to').value), oa: $('#oa-only').checked };
+  applyFilters();
+}
+['#year-from', '#year-to'].forEach((sel) => $(sel).addEventListener('input', readFilters));
+$('#oa-only').addEventListener('change', readFilters);
+$('#clear-filters').addEventListener('click', () => {
+  $('#year-from').value = ''; $('#year-to').value = ''; $('#oa-only').checked = false;
+  readFilters();
+});
+
 // ---- rendering ----
 function renderOrigin() {
-  const o = state.origin;
+  const os = state.origins;
+  if (os.length === 1) {
+    const o = os[0];
+    $('#origin-card').innerHTML = `
+      <div class="kicker">Origin paper</div>
+      <div class="t">${esc(stripTags(o.title))}</div>
+      <div class="m">${esc(shortLabel(o))} · ${esc(venue(o))}</div>`;
+    return;
+  }
   $('#origin-card').innerHTML = `
-    <div class="kicker">Origin paper</div>
-    <div class="t">${esc(stripTags(o.title))}</div>
-    <div class="m">${esc(shortLabel(o))} · ${esc(venue(o))}</div>`;
+    <div class="kicker">${os.length} origin papers</div>
+    <ul class="origins">${os.map((o) => `<li><button data-pick="${o.id}" title="${esc(stripTags(o.title))}"><b>${esc(shortLabel(o))}</b> ${esc(stripTags(o.title))}</button></li>`).join('')}</ul>`;
 }
+$('#origin-card').addEventListener('click', (e) => { const b = e.target.closest('[data-pick]'); if (b) selectPaper(b.dataset.pick); });
 
 function renderLegend() {
   const lg = view.legend();
@@ -351,7 +475,7 @@ function currentList() {
   const raw = listFor(state.tab);
   if (!Array.isArray(raw)) return raw;
   const f = state.filter.toLowerCase().trim();
-  const list = f ? raw.filter((w) => matches(w, f)) : [...raw];
+  const list = raw.filter((w) => (!f || matches(w, f)) && (state.tab === 'saved' || passesFilters(w)));
   const by = {
     sim: (a, b) => (b.simToOrigin ?? b.graphCount ?? 0) - (a.simToOrigin ?? a.graphCount ?? 0),
     cites: (a, b) => (b.cited_by_count || 0) - (a.cited_by_count || 0),
@@ -367,6 +491,8 @@ function renderList() {
     $(`#count-${t}`).textContent = Array.isArray(l) && l.length ? l.length : '';
   }
   $('#tab-help').textContent = TAB_HELP[state.tab];
+  $('#build-saved').hidden = !(state.tab === 'saved' && saved.size >= 1);
+  $('#build-saved').textContent = saved.size > MAX_ORIGINS ? `Build a graph from your ${MAX_ORIGINS} newest saved papers` : `Build a graph from ${saved.size === 1 ? 'this paper' : `these ${saved.size} papers`}`;
   $('#sort-select').options[0].textContent = { graph: 'Most similar', saved: 'Order saved' }[state.tab] || 'Most connected';
   $('#export-label').textContent = state.tab === 'saved' ? 'Export saved' : 'Export list';
   const ol = $('#paper-list');
@@ -375,7 +501,7 @@ function renderList() {
   if (list.error) { ol.innerHTML = `<li class="empty-row"><span class="error">${esc(list.error)}</span></li>`; return; }
   if (!list.length) {
     const msg = state.tab === 'saved' ? 'No saved papers yet. Click ☆ on any paper to keep it here.'
-      : state.filter ? 'No papers match that filter.' : state.graph ? 'Nothing here for this paper.' : '';
+      : state.filter || filtersOn() ? 'No papers match the filters.' : state.graph ? 'Nothing here for this paper.' : '';
     ol.innerHTML = `<li class="empty-row">${msg}</li>`; return;
   }
   const inGraph = new Set(state.lists.graph.map((n) => n.id));
@@ -401,17 +527,7 @@ $('#paper-list').addEventListener('keydown', (e) => {
   const li = e.target.closest('li[data-id]');
   if (li && e.key === 'Enter' && !e.target.closest('[data-star]')) selectPaper(li.dataset.id);
 });
-$('#filter-input').addEventListener('input', (e) => {
-  state.filter = e.target.value;
-  renderList();
-  const f = state.filter.toLowerCase().trim();
-  state.topicFocus = null;
-  if (state.graph) {
-    view.highlight(f ? new Set(state.lists.graph.filter((w) => matches(w, f)).map((w) => w.id)) : null);
-    if (f) { view.select(null); }
-    renderLegend();
-  }
-});
+$('#filter-input').addEventListener('input', (e) => { state.filter = e.target.value; applyFilters(); });
 $('#sort-select').addEventListener('change', (e) => { state.sort = e.target.value; renderList(); });
 function setTab(tab) {
   state.tab = tab;
@@ -446,7 +562,7 @@ async function renderDetail() {
     ${w.isOrigin ? '<div class="kicker">Origin paper</div>' : ''}
     <h2>${esc(stripTags(w.title))}</h2>
     <div class="m">${esc(venue(w))}${venue(w) ? ' · ' : ''}${w.publication_year ?? ''}</div>
-    <div class="authors">${esc(authors.slice(0, 8).join(', '))}${authors.length > 8 ? ` and ${authors.length - 8} more` : ''}</div>
+    <div class="authors">${authorList(w).slice(0, 8).map((a) => (a.id ? `<button class="author" data-author="${esc(a.id)}" title="See ${esc(a.name)}'s papers">${esc(a.name)}</button>` : esc(a.name))).join(', ')}${authors.length > 8 ? ` and ${authors.length - 8} more` : ''}</div>
     ${topic ? `<span class="topic"><i style="background:${view.colorOf(w)}"></i>${esc(topic)}</span>` : ''}
     <div class="stats">
       <div class="stat"><b>${(w.cited_by_count ?? 0).toLocaleString()}</b><span>citations</span></div>
@@ -454,10 +570,12 @@ async function renderDetail() {
       ${inGraph && !w.isOrigin ? `<div class="stat"><b>${Math.round((w.simPct ?? 0) * 100)}%</b><span>similarity rank</span></div>` : ''}
     </div>
     <div class="actions">
-      ${w.isOrigin ? '' : '<button class="btn accent small" id="d-build">Build graph from this paper</button>'}
+      ${w.isOrigin && state.origins.length === 1 ? '' : '<button class="btn accent small" id="d-build">Build graph from this paper</button>'}
+      ${state.graph && !w.isOrigin && state.origins.length < MAX_ORIGINS ? '<button class="btn small" id="d-add" title="Rebuild the graph around the origin papers and this one">＋ Add as origin</button>' : ''}
       <button class="btn small" id="d-star">${isSaved(w.id) ? '★ Saved' : '☆ Save'}</button>
       <button class="btn small" id="d-bib">Copy BibTeX</button>
       <button class="btn small" id="d-ris">Download RIS</button>
+      ${inGraph && !w.isOrigin ? '<button class="btn small ghost" id="d-hide" title="Remove from this graph; the next most similar paper takes its place (H)">Hide from graph</button>' : ''}
     </div>
     <div class="links">
       ${oa ? `<a class="oa" href="${esc(oa)}" target="_blank" rel="noopener">Free full text ↗</a>` : ''}
@@ -468,6 +586,9 @@ async function renderDetail() {
     <h3>Abstract</h3>
     <div class="abstract" id="d-abstract">${w.abstract_inverted_index ? esc(abstractFrom(w.abstract_inverted_index)) : '<span class="m">Loading…</span>'}</div>`;
   $('#d-build')?.addEventListener('click', () => go(w.id));
+  $('#d-add')?.addEventListener('click', () => go([...state.origins.map((o) => o.id), w.id]));
+  $('#d-hide')?.addEventListener('click', () => hidePaper(w.id));
+  box.querySelectorAll('[data-author]').forEach((b) => b.addEventListener('click', () => openAuthor(b.dataset.author)));
   $('#d-star').addEventListener('click', () => toggleSaved(w));
   $('#d-bib').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(toBibTeX([w])); toast('BibTeX copied'); }
@@ -492,6 +613,7 @@ function syncToolbar() {
   $$('[data-color]').forEach((b) => b.classList.toggle('on', b.dataset.color === prefs.colorMode));
   $$('[data-layout]').forEach((b) => b.classList.toggle('on', b.dataset.layout === prefs.layout));
   $('#labels-toggle').checked = prefs.labels;
+  $('#map-axes').hidden = prefs.layout !== 'map';
 }
 $$('[data-color]').forEach((b) => b.addEventListener('click', () => {
   setPref('colorMode', b.dataset.color);
@@ -504,6 +626,13 @@ function setLayout(mode) {
   view.setLayout(mode);
   syncToolbar();
 }
+const axisOptions = (sel) => Object.entries(MAP_METRICS).map(([k, m]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${m.label}</option>`).join('');
+$('#map-x').innerHTML = axisOptions(prefs.mapX);
+$('#map-y').innerHTML = axisOptions(prefs.mapY);
+['x', 'y'].forEach((ax) => $(`#map-${ax}`).addEventListener('change', (e) => {
+  setPref(ax === 'x' ? 'mapX' : 'mapY', e.target.value);
+  view.setMapAxes({ [ax]: e.target.value });
+}));
 $$('[data-layout]').forEach((b) => b.addEventListener('click', () => setLayout(b.dataset.layout)));
 $('#labels-toggle').addEventListener('change', (e) => { setPref('labels', e.target.checked); view.setLabels(e.target.checked); });
 
@@ -528,7 +657,7 @@ $('#toggle-right').addEventListener('click', () => setPanels(prefs.hideLeft, !pr
 $$('[data-export]').forEach((b) => b.addEventListener('click', () => {
   const list = currentList();
   if (!Array.isArray(list) || !list.length) return toast('Nothing to export yet');
-  const base = state.tab === 'saved' ? 'rhizome-saved' : `rhizome-${state.origin.id}-${state.tab}`;
+  const base = state.tab === 'saved' ? 'rhizome-saved' : `rhizome-${state.origin.id}${state.origins.length > 1 ? `-plus${state.origins.length - 1}` : ''}-${state.tab}`;
   const kind = b.dataset.export;
   if (kind === 'bib') download(`${base}.bib`, toBibTeX(list), 'application/x-bibtex');
   if (kind === 'ris') download(`${base}.ris`, toRIS(list), 'application/x-research-info-systems');
@@ -551,11 +680,13 @@ document.addEventListener('keydown', (e) => {
     else if (state.graph) { state.topicFocus = null; view.highlight(null); selectPaper(null); renderLegend(); }
     return;
   }
-  if (typing || e.metaKey || e.ctrlKey || e.altKey || $('#settings').open) return;
+  if (typing || e.metaKey || e.ctrlKey || e.altKey || $$('dialog').some((d) => d.open)) return;
   if (e.key === '/') { e.preventDefault(); $('#search-input').focus(); $('#search-input').select(); return; }
   if ($('#workspace').hidden) return;
   if (e.key === 'f' || e.key === 'F') view.fit();
   if (e.key === 't' || e.key === 'T') setLayout(prefs.layout === 'timeline' ? 'similarity' : 'timeline');
+  if (e.key === 'm' || e.key === 'M') setLayout(prefs.layout === 'map' ? 'similarity' : 'map');
+  if ((e.key === 'h' || e.key === 'H') && state.selected) hidePaper(state.selected);
   if ((e.key === 's' || e.key === 'S') && state.selected) toggleSaved(findWork(state.selected));
   if (e.key === '[') setPanels(!prefs.hideLeft, prefs.hideRight);
   if (e.key === ']') setPanels(prefs.hideLeft, !prefs.hideRight);
@@ -575,9 +706,123 @@ $('#settings').addEventListener('close', () => {
   store.set('apiKey', settings.apiKey);
   if (newSize !== prefs.size) {
     setPref('size', newSize);
-    if (state.origin) { state.graph = null; loadGraph(state.origin.id); }
+    if (state.key) { state.graph = null; loadGraph(state.key); }
   }
 });
+
+// ---- several origin papers: paste, import from a reference manager, or use saved ----
+const DOI_RE = /10\.\d{4,9}\/[^\s"<>{}]+/g;
+function idsFromText(text) {
+  const dois = [...new Set((text.match(DOI_RE) || []).map((d) => d.replace(/[.,;)\]]+$/, '').toLowerCase()))];
+  const ids = [...new Set((text.match(/\bW\d{4,}\b/gi) || []).map((x) => x.toUpperCase()))];
+  return { dois, ids };
+}
+function multiPreview() {
+  const { dois, ids } = idsFromText($('#multi-text').value);
+  const n = dois.length + ids.length;
+  $('#multi-status').textContent = n ? `${n} paper${n === 1 ? '' : 's'} recognised${n > MAX_ORIGINS ? `; the first ${MAX_ORIGINS} will be used` : ''}.` : '';
+  $('#multi-go').disabled = !n;
+}
+$('#multi-open').addEventListener('click', () => { multiPreview(); $('#multi').showModal(); $('#multi-text').focus(); });
+$('#multi-text').addEventListener('input', multiPreview);
+$('#multi-saved').addEventListener('click', () => {
+  if (!saved.size) { $('#multi-status').textContent = 'You have no saved papers yet. Star papers in any graph to collect them.'; return; }
+  const add = [...saved.values()].map((w) => bareDoi(w) || w.id).join('\n');
+  $('#multi-text').value = [$('#multi-text').value.trim(), add].filter(Boolean).join('\n');
+  multiPreview();
+});
+$('#multi-file').addEventListener('change', async (e) => {
+  let entries = 0, text = '';
+  for (const f of e.target.files) {
+    const t = await f.text();
+    text += '\n' + t;
+    entries += (t.match(/^\s*@\w+\s*\{/gm) || []).length + (t.match(/^TY {2}- /gm) || []).length;
+  }
+  const { dois, ids } = idsFromText(text);
+  $('#multi-text').value = [$('#multi-text').value.trim(), ...dois, ...ids].filter(Boolean).join('\n');
+  multiPreview();
+  const found = dois.length + ids.length;
+  if (entries > found) $('#multi-status').textContent += ` ${entries - found} of ${entries} entries had no DOI and were skipped.`;
+  e.target.value = '';
+});
+$('#multi').addEventListener('close', async () => {
+  if ($('#multi').returnValue !== 'go') return;
+  const { dois, ids } = idsFromText($('#multi-text').value);
+  await startFromMany(dois, ids);
+});
+async function startFromMany(dois, ids) {
+  const box = $('#search-results');
+  showLanding();
+  box.hidden = false;
+  box.innerHTML = '<p class="m">Looking up the papers…</p>';
+  try {
+    const found = dois.length ? await getWorksByDois(dois.slice(0, MAX_ORIGINS * 2)) : [];
+    const all = [...new Set([...ids, ...found.map((w) => w.id)])].slice(0, MAX_ORIGINS);
+    if (!all.length) { box.innerHTML = '<p class="error">None of those papers were found in OpenAlex. Check the DOIs.</p>'; return; }
+    const missing = dois.length - found.length;
+    box.hidden = true;
+    if (missing > 0) toast(`${missing} DOI${missing === 1 ? ' was' : 's were'} not found in OpenAlex and left out`);
+    go(all);
+  } catch (err) {
+    box.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
+}
+$('#build-saved').addEventListener('click', () => {
+  const list = [...saved.values()].slice(-MAX_ORIGINS);
+  go(list.map((w) => w.id));
+});
+
+// ---- author pages ----
+let authorRun = 0;
+async function openAuthor(id, sort = 'cited_by_count:desc') {
+  const run = ++authorRun;
+  const body = $('#author-body');
+  if (!$('#author').open) { body.innerHTML = '<p class="m">Loading author…</p>'; $('#author').showModal(); }
+  try {
+    const [a, works] = await Promise.all([getAuthor(id), getAuthorWorks(id, { sort, n: 50 })]);
+    if (run !== authorRun) return;
+    const inst = a.last_known_institutions?.[0]?.display_name;
+    const topics = (a.topics || []).slice(0, 4).map((t) => t.display_name);
+    const top5 = [...works].sort((x, y) => (y.cited_by_count || 0) - (x.cited_by_count || 0)).slice(0, 5).map((w) => w.id);
+    body.innerHTML = `
+      <div class="kicker">Author</div>
+      <h2>${esc(a.display_name)}</h2>
+      <div class="m">${inst ? esc(inst) : ''}</div>
+      <div class="stats">
+        <div class="stat"><b>${(a.works_count ?? 0).toLocaleString()}</b><span>works</span></div>
+        <div class="stat"><b>${(a.cited_by_count ?? 0).toLocaleString()}</b><span>citations</span></div>
+        ${a.summary_stats?.h_index != null ? `<div class="stat"><b>${a.summary_stats.h_index}</b><span>h-index</span></div>` : ''}
+      </div>
+      ${topics.length ? `<p class="m">Works on ${esc(topics.join(', '))}</p>` : ''}
+      <div class="actions">
+        ${top5.length > 1 ? `<button class="btn accent small" id="a-build">Map their ${top5.length} most cited papers</button>` : ''}
+        <a class="btn small" href="https://openalex.org/${esc(a.id)}" target="_blank" rel="noopener">OpenAlex profile</a>
+        ${a.orcid ? `<a class="btn small" href="${esc(a.orcid)}" target="_blank" rel="noopener">ORCID</a>` : ''}
+      </div>
+      <div class="seg author-sort" role="group" aria-label="Sort works">
+        <button data-asort="cited_by_count:desc" class="${sort.startsWith('cited') ? 'on' : ''}">Most cited</button>
+        <button data-asort="publication_date:desc" class="${sort.startsWith('publication') ? 'on' : ''}">Newest</button>
+      </div>
+      <ol class="paper-list author-works">${works.map((w) => `
+        <li data-id="${w.id}" tabindex="0">
+          <span class="dot" style="background:var(--accent)"></span>
+          <div><div class="t">${esc(stripTags(w.title))}</div>
+          <div class="m">${w.publication_year ?? ''} · ${esc(venue(w))} · ${w.cited_by_count ?? 0} cites${w.open_access?.oa_url ? ' · <span class="badge oa">free PDF</span>' : ''}</div></div>
+          <button class="star ${isSaved(w.id) ? 'on' : ''}" data-astar="${w.id}" aria-label="Save paper" title="Save paper">${isSaved(w.id) ? '★' : '☆'}</button>
+        </li>`).join('')}</ol>
+      <p class="hint">Click a paper to build its graph.</p>`;
+    $('#a-build')?.addEventListener('click', () => { $('#author').close(); go(top5); });
+    body.querySelectorAll('[data-asort]').forEach((b) => b.addEventListener('click', () => openAuthor(id, b.dataset.asort)));
+    body.querySelector('.author-works').addEventListener('click', (e) => {
+      const star = e.target.closest('[data-astar]');
+      if (star) { const w = works.find((x) => x.id === star.dataset.astar); toggleSaved(w); star.textContent = isSaved(w.id) ? '★' : '☆'; star.classList.toggle('on', isSaved(w.id)); return; }
+      const li = e.target.closest('li[data-id]');
+      if (li) { $('#author').close(); go(li.dataset.id); }
+    });
+  } catch (err) {
+    if (run === authorRun) body.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
+}
 
 function toast(msg) {
   $$('.toast').forEach((t) => t.remove());
@@ -589,5 +834,6 @@ function toast(msg) {
 // ---- boot ----
 renderThemeMenu();
 syncToolbar();
+renderTrail();
 setPanels(prefs.hideLeft, prefs.hideRight);
 route();

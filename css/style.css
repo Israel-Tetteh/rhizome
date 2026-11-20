@@ -309,6 +309,63 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px sol
 .detail-panel .links a.oa { font-weight: 600; }
 .detail-panel h3 { font-size: 14px; margin: 18px 0 4px; }
 
+/* authors link to author pages */
+.author { border: 0; background: none; padding: 0; font: inherit; color: var(--text); cursor: pointer; text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+.author:hover, .author:focus-visible { color: var(--brand); text-decoration-color: currentColor; }
+.btn.ghost { background: none; color: var(--muted); }
+
+/* several origins */
+.multi-open { display: inline-grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; text-align: left; margin-top: 18px; padding: 10px 16px; white-space: normal; background: var(--surface); }
+.multi-open svg { grid-row: span 2; color: var(--brand); }
+.multi-open small { color: var(--muted); font-size: 12.5px; }
+.origin-card .origins { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; max-height: 150px; overflow: auto; }
+.origin-card .origins button { all: unset; display: block; cursor: pointer; font-size: 12.5px; line-height: 1.35; padding: 3px 4px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; box-sizing: border-box; }
+.origin-card .origins button:hover, .origin-card .origins button:focus-visible { background: var(--surface-2); }
+dialog.wide { max-width: 620px; }
+dialog textarea { padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+.multi-sources { display: flex; flex-wrap: wrap; gap: 8px; }
+dialog label.file-btn { display: inline-flex; margin: 0; font-size: 13px; }
+#multi-go:disabled { opacity: .5; cursor: default; }
+
+/* trail of visited graphs */
+.trail { display: flex; align-items: center; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 12px; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+.trail a { color: var(--muted); text-decoration: none; padding: 2px 6px; border-radius: 999px; }
+.trail a:hover { background: var(--surface-2); color: var(--text); }
+.trail .here { font-weight: 700; color: var(--text); background: var(--surface-2); padding: 2px 8px; border-radius: 999px; }
+.trail i { color: var(--muted); font-style: normal; }
+
+/* filters */
+.filters { margin: 0 10px 6px; font-size: 13px; }
+.filters summary { cursor: pointer; color: var(--muted); padding: 2px 2px; }
+.filters summary span { color: var(--accent); font-weight: 600; }
+.filters[open] { background: var(--surface-2); border-radius: 8px; padding: 6px 10px 8px; }
+.filter-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.filter-row label { display: flex; align-items: center; gap: 6px; }
+.filter-row input[type=number] { width: 72px; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); font-size: 13px; }
+.filter-row.check input { accent-color: var(--brand); margin: 0; }
+.hidden-row span { color: var(--muted); }
+.linkish { border: 0; background: none; padding: 0; margin-top: 6px; font: inherit; font-size: 12px; color: var(--brand); cursor: pointer; text-decoration: underline; }
+.build-saved { margin: 0 12px 8px; }
+
+/* map layout */
+.seg.axes label { display: inline-flex; align-items: center; }
+.seg.axes select { border: 0; background: none; font-size: 13px; color: var(--text); padding: 4px 2px; cursor: pointer; }
+.time-axis[data-mode=map] line { stroke-dasharray: none; opacity: .6; }
+.time-axis .ty { text-anchor: end; }
+.time-axis .axis-title { font: 700 12px var(--font-ui); fill: var(--text); text-anchor: middle; }
+
+/* author page */
+#author .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 700; }
+#author h2 { margin: 2px 0 2px; }
+#author .m { color: var(--muted); font-size: 13px; }
+#author .stats { display: flex; gap: 18px; margin: 12px 0; }
+#author .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+#author .stat span { font-size: 12px; color: var(--muted); }
+#author .actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+#author .actions a.btn { text-decoration: none; color: var(--text); }
+#author .author-sort { margin: 6px 0; box-shadow: none; }
+#author .author-works { max-height: 46vh; overflow: auto; padding: 0; margin: 6px 0 0; }
+
 dialog { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); max-width: 460px; width: calc(100% - 32px); }
 dialog::backdrop { background: rgba(0,0,0,.4); }
 dialog h2 { margin-top: 0; font: 600 20px var(--font-display); }
