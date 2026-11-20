@@ -10,17 +10,24 @@ linked, even when they never cite each other. No account, no subscription, no tr
 
 ## What you get
 
-- **Similarity graph.** About 40 related papers (25 to 80, set in Settings). Node size shows citations,
-  colour shows publication year, and line thickness shows how strongly two papers are related.
+- **Similarity graph.** About 40 related papers (25 to 80, set in Settings). Node size shows citations
+  and line thickness shows how strongly two papers are related.
+- **Colour by year, citations or research topic.** In topic mode the legend lists the main OpenAlex
+  topics in the graph; click one to highlight its papers.
+- **Two layouts.** *Similarity* pulls related papers together; *Timeline* spreads them by publication year.
 - **Prior works.** Papers cited by many papers in the graph, usually the foundations of the field.
 - **Derivative works.** Papers that cite many papers in the graph, usually recent reviews and follow-up work.
-- **Paper details.** Authors, venue, citation count and abstract, with links to the publisher,
-  OpenAlex and Google Scholar. Double-click any node (or press *Build graph from this paper*) to re-centre.
-- **Export for your reference manager.** Any list exports to **BibTeX**, **RIS** (Zotero, Mendeley,
-  EndNote) or **CSV**. In Zotero use *File → Import…* and pick the downloaded file. The graph itself
-  downloads as SVG.
-- **Shareable links.** Every graph has its own URL, e.g.
+- **Saved papers.** Star (☆) any paper from any graph. Your saved list stays in your browser between visits.
+- **Paper details.** Authors, venue, topic, citations and abstract, with links to a free full-text copy
+  when one exists, the publisher, OpenAlex and Google Scholar. Double-click a node to re-centre on it.
+- **Find in graph.** Typing in the list filter also highlights matching papers in the graph.
+- **Export for your reference manager.** Any list, or your saved papers, exports to **BibTeX**, **RIS**
+  (Zotero, Mendeley, EndNote) or **CSV**. In Zotero use *File → Import…*. The graph downloads as PNG or SVG.
+- **Six colour themes.** System, Meadow (light), Night (dark), Paper (sepia), Ocean and High contrast.
+- **Collapsible side panels** to give the graph the whole screen.
+- **Recent graphs** on the home page, and a shareable link for every graph, e.g.
   `https://israel-tetteh.github.io/rhizome/#/W4226146299`.
+- **Keyboard shortcuts:** `/` search, `F` fit, `T` timeline, `S` star, `[` and `]` panels, `Esc` clear.
 
 ## How similarity is computed
 
@@ -81,8 +88,8 @@ To host your own copy, fork the repo and turn on GitHub Pages (Settings → Page
 
 ## Contributing
 
-Issues and pull requests are welcome. Ideas on the list: multi-paper origins, saving graphs,
-a timeline view, and an R/Shiny companion.
+Issues and pull requests are welcome. Ideas on the list: graphs built from several origin papers, saving whole graphs,
+and an R/Shiny companion.
 
 ## Licence
 
