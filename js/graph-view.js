@@ -80,9 +80,13 @@ export function createGraphView(container, { onSelect, onOpen }) {
       .force('x', d3.forceX().strength(0.04))
       .force('y', d3.forceY().strength(0.04))
       .on('tick', tick);
-    svg.call(zoom.transform, d3.zoomIdentity);
-    sim.on('end', () => fit());
-    setTimeout(() => fit(), 1500);
+    // Settle the layout up front (cheap for <100 nodes) so the first frame is
+    // already readable and framed, then let it relax gently.
+    sim.stop();
+    sim.tick(300);
+    tick();
+    fit(40, 0);
+    sim.alpha(0.03).restart();
     select(selectedId && neighbours.has(selectedId) ? selectedId : null);
     return color;
   }
@@ -106,14 +110,15 @@ export function createGraphView(container, { onSelect, onOpen }) {
   function hover(id) { emphasise(id || selectedId); }
   function select(id) { selectedId = id; emphasise(id); }
 
-  function fit(pad = 40) {
+  function fit(pad = 40, duration = 500) {
     if (!data?.nodes.length) return;
     const { width, height } = container.getBoundingClientRect();
     const xs = data.nodes.map((n) => n.x), ys = data.nodes.map((n) => n.y);
     const [x0, x1, y0, y1] = [Math.min(...xs) - 30, Math.max(...xs) + 30, Math.min(...ys) - 30, Math.max(...ys) + 40];
     const k = Math.min(2, 0.95 / Math.max((x1 - x0) / (width - pad), (y1 - y0) / (height - pad)));
     const t = d3.zoomIdentity.scale(k).translate(-(x0 + x1) / 2, -(y0 + y1) / 2);
-    svg.transition().duration(500).call(zoom.transform, t);
+    if (duration) svg.transition().duration(duration).call(zoom.transform, t);
+    else svg.call(zoom.transform, t);
   }
 
   const zoomBy = (f) => svg.transition().duration(250).call(zoom.scaleBy, f);

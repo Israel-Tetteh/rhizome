@@ -129,6 +129,7 @@ async function loadGraph(id) {
     state.origin = origin;
     document.title = `${stripTags(origin.title).slice(0, 60)} · Rhizome`;
     renderOrigin();
+    $('#search-input').value = origin.doi ? origin.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : origin.id;
     const graph = await buildGraph(origin, { size: prefs.size, onProgress: (t) => run === state.runId && setStatus(t) });
     if (run !== state.runId) return;
     if (graph.nodes.length < 2) {
