@@ -8,7 +8,7 @@
 // together when they share many references or are often cited together, even
 // if neither cites the other.
 
-import { getWorksByIds, getCitingWorks } from './openalex.js?v=20261120d';
+import { getWorksByIds, getCitingWorks } from './openalex.js?v=20261120e';
 
 const REF_LIMIT = 300;      // origin references to fetch
 const CITER_PAGES = 2;      // up to 200 papers citing the origin

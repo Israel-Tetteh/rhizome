@@ -185,7 +185,8 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px sol
 
 /* workspace */
 .workspace {
-  flex: 1; display: grid; grid-template-columns: minmax(290px, 370px) minmax(0, 1fr) minmax(290px, 370px);
+  /* flex: none, so the page body cannot stretch the workspace to fit a long abstract */
+  flex: none; display: grid; grid-template-columns: minmax(290px, 370px) minmax(0, 1fr) minmax(290px, 370px);
   grid-template-rows: minmax(0, 1fr);
   height: calc(100vh - 57px - 34px); min-height: 540px;
 }
