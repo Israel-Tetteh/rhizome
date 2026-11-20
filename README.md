@@ -34,7 +34,16 @@ or researcher can use it, host it, or improve it.
   and line thickness shows how strongly two papers are related.
 - **Colour by year, citations or research topic.** In topic mode the legend lists the main OpenAlex
   topics in the graph; click one to highlight its papers.
-- **Two layouts.** *Similarity* pulls related papers together; *Timeline* spreads them by publication year.
+- **Start from several papers.** Paste a list of DOIs, import a BibTeX or RIS export from Zotero
+  (or Mendeley, EndNote), or use your saved papers. Rhizome maps the papers most related to the whole
+  set (up to 25 origins). Any paper can also be added as an extra origin from its details panel.
+- **Three layouts.** *Similarity* pulls related papers together; *Timeline* spreads them by publication
+  year; *Map* plots them on two axes you choose (year, citations, references, similarity or connections).
+- **Author pages.** Click any author to see their profile, h-index and papers (most cited or newest),
+  and map their five most cited papers in one click.
+- **Filters and hiding.** Limit lists and the graph to a year range or to papers with a free full text.
+  Hide a noisy paper (for example a generic methods paper) and the next most similar one takes its place.
+- **Trail.** Every graph you visit in a session stays in a trail at the top of the list, to hop back.
 - **Prior works.** Papers cited by many papers in the graph, usually the foundations of the field.
 - **Derivative works.** Papers that cite many papers in the graph, usually recent reviews and follow-up work.
 - **Saved papers.** Star (☆) any paper from any graph. Your saved list stays in your browser between visits.
@@ -47,7 +56,8 @@ or researcher can use it, host it, or improve it.
 - **Collapsible side panels** to give the graph the whole screen.
 - **Recent graphs** on the home page, and a shareable link for every graph, e.g.
   `https://israel-tetteh.github.io/rhizome/#/W4226146299`.
-- **Keyboard shortcuts:** `/` search, `F` fit, `T` timeline, `S` star, `[` and `]` panels, `Esc` clear.
+- **Keyboard shortcuts:** `/` search, `F` fit, `T` timeline, `M` map, `S` star, `H` hide,
+  `[` and `]` panels, `Esc` clear.
 
 ## How similarity is computed
 
