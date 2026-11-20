@@ -1,10 +1,10 @@
 import {
   settings, usage, getWork, getWorksByIds, getWorksByDois, getAuthor, getAuthorWorks, searchWorks,
   resolveViaSemanticScholar, abstractFrom, authorNames, authorList, shortLabel, venue, doiUrl, ApiError,
-} from './openalex.js?v=20261120e';
-import { buildGraph, assembleGraph, priorWorks, derivativeWorks } from './graph-builder.js?v=20261120e';
-import { createGraphView, topicOf, MAP_METRICS } from './graph-view.js?v=20261120e';
-import { toBibTeX, toRIS, toCSV, download } from './export.js?v=20261120e';
+} from './openalex.js?v=20261120f';
+import { buildGraph, assembleGraph, priorWorks, derivativeWorks } from './graph-builder.js?v=20261120f';
+import { createGraphView, topicOf, MAP_METRICS } from './graph-view.js?v=20261120f';
+import { toBibTeX, toRIS, toCSV, download } from './export.js?v=20261120f';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -548,7 +548,11 @@ function findWork(id) {
 
 function selectPaper(id, { fromGraph = false } = {}) {
   state.selected = id;
-  if (!fromGraph) view.select(id && state.lists.graph.some((n) => n.id === id) ? id : null);
+  if (!fromGraph) {
+    const inGraph = id && state.lists.graph.some((n) => n.id === id);
+    view.select(inGraph ? id : null);
+    if (inGraph) view.reveal(id);
+  }
   $$('#paper-list li').forEach((li) => li.classList.toggle('selected', li.dataset.id === id));
   if (id) document.querySelector(`#paper-list li[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
   if (id && prefs.hideRight && innerWidth > 720) setPanels(prefs.hideLeft, false);
@@ -669,8 +673,8 @@ $$('[data-export]').forEach((b) => b.addEventListener('click', () => {
   if (kind === 'csv') download(`${base}.csv`, toCSV(list), 'text/csv');
   toast(`Exported ${list.length} papers`);
 }));
-$('#zoom-in').addEventListener('click', () => view.zoomBy(1.3));
-$('#zoom-out').addEventListener('click', () => view.zoomBy(1 / 1.3));
+$('#zoom-in').addEventListener('click', () => view.zoomBy(1.5));
+$('#zoom-out').addEventListener('click', () => view.zoomBy(1 / 1.5));
 $('#zoom-fit').addEventListener('click', () => view.fit());
 $('#share-btn').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(location.href); toast('Link to this graph copied'); }

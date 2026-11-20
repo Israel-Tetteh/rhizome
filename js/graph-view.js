@@ -1,6 +1,9 @@
 // Interactive force-directed view of the similarity graph (d3, SVG).
 import * as d3 from 'https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm';
-import { shortLabel } from './openalex.js?v=20261120e';
+import { shortLabel, authorNames, venue } from './openalex.js?v=20261120f';
+
+const escHtml = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const LABEL_PX = 11; // label size on screen, whatever the zoom
 
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const ramp = () => d3.interpolateRgbBasis([0, 1, 2, 3].map((i) => cssVar(`--ramp-${i}`) || '#888'));
@@ -75,10 +78,34 @@ export function createGraphView(container, { onSelect, onOpen }) {
   let mapAxes = { x: 'year', y: 'citations' }, mapBox = null;
 
   let userMoved = false; // true once the reader pans or zooms by hand
-  const zoom = d3.zoom().scaleExtent([0.15, 8]).on('zoom', (e) => {
+  let k = 1;               // current zoom scale
+  const zoom = d3.zoom().scaleExtent([0.15, 10]).on('zoom', (e) => {
     root.attr('transform', e.transform);
-    if (e.sourceEvent) userMoved = true;
+    if (e.sourceEvent) { userMoved = true; hideTip(); }
+    if (e.transform.k !== k) { k = e.transform.k; rescale(); }
+    scheduleLabels();
   });
+
+  // Hover card with the paper's essentials
+  const tip = d3.select(container).append('div').attr('class', 'graph-tip').attr('role', 'tooltip').property('hidden', true);
+  function showTip(e, n) {
+    const authors = authorNames(n);
+    const sim = n.isOrigin ? '<em>Origin paper</em>' : n.simPct != null ? `${Math.round(n.simPct * 100)}% similarity rank` : '';
+    tip.html(`<b>${escHtml(String(n.title).replace(/<[^>]+>/g, ''))}</b>
+      <span>${escHtml(authors.slice(0, 3).join(', '))}${authors.length > 3 ? ' et al.' : ''}</span>
+      <span>${n.publication_year ?? ''}${venue(n) ? ' · ' + escHtml(venue(n)) : ''}</span>
+      <span>${(n.cited_by_count ?? 0).toLocaleString()} citations${sim ? ' · ' + sim : ''}</span>
+      <small>Click for details · double-click to map it · drag to move</small>`).property('hidden', false);
+    moveTip(e);
+  }
+  function moveTip(e) {
+    if (tip.property('hidden')) return;
+    const [x, y] = d3.pointer(e, container);
+    const { width, height } = size();
+    const el = tip.node(), w = el.offsetWidth, h = el.offsetHeight;
+    tip.style('left', `${x + 16 + w > width ? x - w - 12 : x + 16}px`).style('top', `${y + 16 + h > height ? Math.max(4, y - h - 12) : y + 16}px`);
+  }
+  function hideTip() { tip.property('hidden', true); }
   svg.call(zoom).on('dblclick.zoom', null);
   svg.on('click', (e) => { if (e.target === svg.node()) { select(null); onSelect?.(null); } });
 
@@ -89,6 +116,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
 
   function render(graph) {
     data = graph;
+    hideTip();
     hoverId = null; // the pointer may have been over a node of the previous graph
     userMoved = false;
     const { width, height } = size();
@@ -116,17 +144,25 @@ export function createGraphView(container, { onSelect, onOpen }) {
       .on('click', (e, n) => { e.stopPropagation(); select(n.id); onSelect?.(n.id); })
       .on('dblclick', (e, n) => { e.stopPropagation(); onOpen?.(n.id); })
       .on('keydown', (e, n) => { if (e.key === 'Enter') { select(n.id); onSelect?.(n.id); } })
-      .on('mouseenter focus', (e, n) => { hoverId = n.id; emphasise(); })
-      .on('mouseleave blur', () => { hoverId = null; emphasise(); })
+      .on('mouseenter focus', (e, n) => { hoverId = n.id; emphasise(); if (e.type === 'mouseenter') showTip(e, n); })
+      .on('mousemove', (e) => moveTip(e))
+      .on('mouseleave blur', () => { hoverId = null; emphasise(); hideTip(); })
       .call(d3.drag()
-        .on('start', (e, n) => { if (!e.active) sim.alphaTarget(0.2).restart(); n.fx = n.x; n.fy = n.y; })
+        .on('start', (e, n) => { hideTip(); if (!e.active) sim.alphaTarget(0.2).restart(); n.fx = n.x; n.fy = n.y; })
         .on('drag', (e, n) => { n.fx = e.x; n.fy = e.y; })
         .on('end', (e, n) => { if (!e.active) sim.alphaTarget(0); if (!(n.isOrigin && layout === 'similarity' && soleOrigin())) { n.fx = null; n.fy = null; } }));
-    nodeSel.selectAll('title').data((n) => [n]).join('title').text((n) => `${n.title}\n${shortLabel(n)} · ${n.cited_by_count ?? 0} citations`);
+    nodeSel.selectAll('title').remove();
 
     labelSel = labelG.selectAll('text').data(graph.nodes, (n) => n.id).join('text')
       .attr('class', (n) => (n.isOrigin ? 'label origin' : 'label'))
-      .text((n) => shortLabel(n).replace(' et al.', ''));
+      .text((n) => shortLabel(n).replace(' et al.', ''))
+      .style('font-size', null);
+    // Measure each label once at its on-screen size, for overlap checks.
+    labelSel.each(function (n) {
+      let w = 0;
+      try { w = this.getComputedTextLength(); } catch { /* not rendered */ }
+      n.lw = w || this.textContent.length * 6.2;
+    });
 
     sim?.stop();
     sim = d3.forceSimulation(graph.nodes)
@@ -145,6 +181,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
     fit(40, 0);
     sim.alpha(0.03).restart();
     recolor();
+    rescale();
     setLabels(showLabels);
     highlightSet = null;
     selectedId = selectedId && neighbours.has(selectedId) ? selectedId : null;
@@ -227,7 +264,9 @@ export function createGraphView(container, { onSelect, onOpen }) {
     linkSel.attr('x1', (l) => l.source.x).attr('y1', (l) => l.source.y)
       .attr('x2', (l) => l.target.x).attr('y2', (l) => l.target.y);
     nodeSel.attr('cx', (n) => n.x).attr('cy', (n) => n.y);
-    labelSel.attr('x', (n) => n.x).attr('y', (n) => n.y + n.r + 11);
+    const sk = Math.sqrt(k);
+    labelSel.attr('x', (n) => n.x).attr('y', (n) => n.y + n.r / sk + (LABEL_PX + 1) / k);
+    scheduleLabels();
     if (layout === 'timeline' && data) {
       const ys = data.nodes.map((n) => n.y);
       axisG.selectAll('text.tick').attr('y', d3.min(ys) - 34);
@@ -247,6 +286,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
     nodeSel.classed('dim', (n) => !lit(n.id)).classed('selected', (n) => n.id === selectedId)
       .classed('match', (n) => !!highlightSet && !focus && highlightSet.has(n.id));
     labelSel.classed('dim', (n) => !lit(n.id)).classed('show', (n) => (!!focus || !!highlightSet) && lit(n.id));
+    scheduleLabels();
     linkSel.classed('dim', (l) => (focus ? l.source.id !== focus && l.target.id !== focus : !!highlightSet && !(highlightSet.has(l.source.id) && highlightSet.has(l.target.id))))
       .classed('hot', (l) => !!focus && (l.source.id === focus || l.target.id === focus));
   }
@@ -260,7 +300,68 @@ export function createGraphView(container, { onSelect, onOpen }) {
     return colorer;
   }
   function setColorMode(mode) { colorMode = mode; return recolor(); }
-  function setLabels(on) { showLabels = on; labelG.attr('data-mode', on ? 'all' : 'focus'); }
+  function setLabels(on) { showLabels = on; scheduleLabels(); }
+
+  // Zooming in spreads papers apart faster than it enlarges them (radius
+  // grows with the square root of the zoom), and labels keep a fixed screen
+  // size, so zooming in always gains room instead of just magnifying clutter.
+  function rescale() {
+    if (!nodeSel) return;
+    const sk = Math.sqrt(k);
+    nodeSel.attr('r', (n) => n.r / sk);
+    labelSel.style('font-size', (n) => `${(n.isOrigin ? LABEL_PX + 1 : LABEL_PX) / k}px`)
+      .style('stroke-width', `${3 / k}px`)
+      .attr('y', (n) => n.y + n.r / sk + (LABEL_PX + 1) / k);
+  }
+
+  // Show as many labels as fit without overlapping, most important first:
+  // the paper in focus and its neighbours, the origins, then the most cited.
+  // Zooming in makes room, so more labels appear.
+  let labelRaf = 0;
+  function scheduleLabels() {
+    if (!labelRaf) labelRaf = requestAnimationFrame(() => { labelRaf = 0; layoutLabels(); });
+  }
+  function layoutLabels() {
+    if (!labelSel || !data) return;
+    const t = d3.zoomTransform(svg.node());
+    const focus = hoverId || selectedId;
+    const near = focus ? neighbours.get(focus) : null;
+    const narrowed = !!focus || !!highlightSet;
+    const lit = (id) => (focus ? id === focus || near?.has(id) : highlightSet ? highlightSet.has(id) : true);
+    const pri = (n) => (n.id === focus ? 4e9 : 0) + (n.isOrigin ? 2e9 : 0) + (narrowed && lit(n.id) ? 1e9 : 0) + (n.cited_by_count || 0);
+    const { width, height } = size();
+    const sk = Math.sqrt(k);
+    // Papers themselves are obstacles, so labels never cover another paper.
+    const circles = data.nodes.map((n) => { const [x, y] = t.apply([n.x, n.y]); return { id: n.id, x, y, r: (n.r / sk) * k }; });
+    const hitsCircle = (box, ownId) => circles.some((c) => c.id !== ownId
+      && c.x + c.r > box[0] && c.x - c.r < box[2] && c.y + c.r > box[1] && c.y - c.r < box[3]);
+    const placed = [];
+    const show = new Set();
+    for (const n of [...data.nodes].sort((a, b) => pri(b) - pri(a))) {
+      if (narrowed && !lit(n.id)) continue;
+      if (!showLabels && !n.isOrigin && !narrowed) continue;
+      const [sx, sy] = t.apply([n.x, n.y]);
+      const top = sy + (n.r / sk) * k + 1;
+      const w = n.lw * (n.isOrigin ? 1.15 : 1);
+      const box = [sx - w / 2 - 3, top, sx + w / 2 + 3, top + LABEL_PX + 4];
+      if (box[2] < -width / 2 || box[0] > width / 2 || box[3] < -height / 2 || box[1] > height / 2) continue; // off screen
+      if (placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+      if (n.id !== focus && !n.isOrigin && hitsCircle(box, n.id)) continue;
+      placed.push(box);
+      show.add(n.id);
+    }
+    labelSel.classed('off', (n) => !show.has(n.id));
+  }
+
+  /** Pan smoothly to a paper if it is outside the visible area. */
+  function reveal(id) {
+    const n = data?.nodes.find((x) => x.id === id);
+    if (!n) return;
+    const [sx, sy] = d3.zoomTransform(svg.node()).apply([n.x, n.y]);
+    const { width, height } = size();
+    if (Math.abs(sx) < width / 2 - 60 && Math.abs(sy) < height / 2 - 60) return;
+    svg.transition().duration(450).call(zoom.translateTo, n.x, n.y);
+  }
 
   function fit(pad = 40, duration = 500) {
     if (!data?.nodes.length) return;
@@ -277,7 +378,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
     else svg.call(zoom.transform, t);
   }
 
-  const zoomBy = (f) => { userMoved = true; svg.transition().duration(250).call(zoom.scaleBy, f); };
+  const zoomBy = (f) => { userMoved = true; hideTip(); svg.transition().duration(300).call(zoom.scaleBy, f); };
 
   /** Self-contained SVG with the current theme's colours baked in. */
   function exportSVG() {
@@ -292,7 +393,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
       .node{stroke:${cssVar('--node-stroke')};stroke-width:1.2} .node.origin{stroke:${cssVar('--accent')};stroke-width:3.5}
       .label{font:10px sans-serif;fill:${cssVar('--muted')};text-anchor:middle;paint-order:stroke;stroke:${cssVar('--bg')};stroke-width:3px}
       .label.origin{font-weight:700;fill:${cssVar('--text')};font-size:11px}
-      .labels[data-mode=focus] .label:not(.show):not(.origin){display:none}
+      .label.off{display:none} .links line,.node{vector-effect:non-scaling-stroke}
       .time-axis line{stroke:${cssVar('--border')};stroke-dasharray:2 4} .time-axis text{font:11px sans-serif;fill:${cssVar('--muted')};text-anchor:middle} .time-axis .ty{text-anchor:end} .time-axis .axis-title{font-weight:600;fill:${cssVar('--text')}}</style>
       <rect x="${-width / 2}" y="${-height / 2}" width="${width}" height="${height}" fill="${cssVar('--bg')}"/>`);
     return new XMLSerializer().serializeToString(clone);
@@ -329,7 +430,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
 
   return {
     render, select, highlight, fit, zoomBy, exportSVG, exportPNG,
-    setColorMode, setLayout, setMapAxes, setLabels, recolor,
+    setColorMode, setLayout, setMapAxes, setLabels, recolor, reveal,
     colorOf: (w) => (colorer ? colorer.color(w) : cssVar('--muted')),
     legend: () => colorer?.legend,
   };

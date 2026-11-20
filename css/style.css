@@ -244,8 +244,19 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px sol
 .label { font: 10px var(--font-ui); fill: var(--muted); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; transition: opacity .15s; }
 .label.origin { font-weight: 700; fill: var(--text); font-size: 11px; }
 .label.dim { opacity: .08; }
+.label { font-size: 11px; font-weight: 500; }
 .label.show { fill: var(--text); }
-.labels[data-mode="focus"] .label:not(.show):not(.origin) { display: none; }
+.label.off { display: none; }
+/* lines and outlines keep their width on screen at any zoom */
+.links line, .node { vector-effect: non-scaling-stroke; }
+.node { transition: opacity .15s, stroke-width .15s; }
+.graph-tip { position: absolute; z-index: 5; pointer-events: none; max-width: 300px; display: grid; gap: 2px; padding: 9px 11px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); font-size: 12.5px; line-height: 1.4; }
+.graph-tip[hidden] { display: none; }
+.graph-tip b { font-weight: 600; font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.graph-tip span { color: var(--muted); }
+.graph-tip em { color: var(--accent); font-style: normal; font-weight: 600; }
+.graph-tip small { color: var(--muted); font-size: 11px; margin-top: 3px; border-top: 1px solid var(--border); padding-top: 4px; }
+@media (hover: none) { .graph-tip { display: none; } }
 .time-axis line { stroke: var(--border); stroke-dasharray: 2 4; }
 .time-axis text { font: 600 11px var(--font-ui); fill: var(--muted); text-anchor: middle; }
 
