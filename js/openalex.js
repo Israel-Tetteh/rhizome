@@ -68,28 +68,21 @@ export async function getWork(ref) {
 /** Fetch many works by OpenAlex id, 100 per call. */
 export async function getWorksByIds(ids, { select = WORK_FIELDS } = {}) {
   const unique = [...new Set(ids.map(shortId))].filter(Boolean);
-  const out = [];
-  for (let i = 0; i < unique.length; i += 100) {
-    const chunk = unique.slice(i, i + 100);
-    const j = await get('/works', { filter: `ids.openalex:${chunk.join('|')}`, per_page: 100, select });
-    out.push(...j.results.map(normalize));
-  }
-  return out;
+  const chunks = [];
+  for (let i = 0; i < unique.length; i += 100) chunks.push(unique.slice(i, i + 100));
+  const pages = await Promise.all(chunks.map((chunk) =>
+    get('/works', { filter: `ids.openalex:${chunk.join('|')}`, per_page: 100, select })));
+  return pages.flatMap((j) => j.results.map(normalize));
 }
 
-/** Works that cite any of `ids`, most cited first. */
+/** Works that cite any of `ids`, most cited first. Pages are fetched in parallel. */
 export async function getCitingWorks(ids, { pages = 2, select = WORK_FIELDS } = {}) {
   const unique = [...new Set(ids.map(shortId))].slice(0, 100);
-  const out = [];
-  for (let page = 1; page <= pages; page++) {
-    const j = await get('/works', {
-      filter: `cites:${unique.join('|')}`, sort: 'cited_by_count:desc',
-      per_page: 100, page, select,
-    });
-    out.push(...j.results.map(normalize));
-    if (j.results.length < 100) break;
-  }
-  return out;
+  const params = (page) => ({ filter: `cites:${unique.join('|')}`, sort: 'cited_by_count:desc', per_page: 100, page, select });
+  const first = await get('/works', params(1));
+  const total = Math.min(pages, Math.ceil((first.meta?.count || 0) / 100));
+  const rest = await Promise.all(Array.from({ length: Math.max(0, total - 1) }, (_, i) => get('/works', params(i + 2))));
+  return [first, ...rest].flatMap((j) => j.results.map(normalize));
 }
 
 export async function searchWorks(query, n = 8) {

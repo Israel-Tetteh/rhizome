@@ -30,7 +30,7 @@ globalThis.fetch = async (url) => {
   let results = [];
   if (f.startsWith('ids.openalex:')) results = f.slice(13).split('|').map((id) => byId.get(id)).filter(Boolean);
   else if (f.startsWith('cites:')) results = citers(f.slice(6).split('|'));
-  return { ok: true, status: 200, json: async () => ({ meta: { cost_usd: 0.0001 }, results }) };
+  return { ok: true, status: 200, json: async () => ({ meta: { cost_usd: 0.0001, count: results.length }, results }) };
 };
 
 const origin = { ...byId.get('W1'), id: 'W1', referenced_works: ['W10', 'W11', 'W12'], related_works: [] };

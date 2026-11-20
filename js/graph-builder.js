@@ -22,16 +22,13 @@ export async function buildGraph(origin, { size = 40, onProgress = () => {} } = 
   const add = (w) => { if (w && w.id && !docs.has(w.id)) docs.set(w.id, w); };
   add(origin);
 
-  onProgress('Fetching references…');
-  (await getWorksByIds(origin.referenced_works.slice(0, REF_LIMIT))).forEach(add);
-
-  onProgress('Fetching papers that cite it…');
-  (await getCitingWorks([origin.id], { pages: CITER_PAGES })).forEach(add);
-
-  if (origin.related_works?.length) {
-    onProgress('Fetching related papers…');
-    (await getWorksByIds(origin.related_works)).forEach(add);
-  }
+  onProgress('Fetching references and citing papers…');
+  const [refs, citers, related] = await Promise.all([
+    getWorksByIds(origin.referenced_works.slice(0, REF_LIMIT)),
+    getCitingWorks([origin.id], { pages: CITER_PAGES }),
+    origin.related_works?.length ? getWorksByIds(origin.related_works) : [],
+  ]);
+  [...refs, ...citers, ...related].forEach(add);
 
   // Siblings: papers that cite the origin's most specific references (the
   // least-cited ones) are likely to share many references with the origin,
