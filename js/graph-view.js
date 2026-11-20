@@ -1,6 +1,6 @@
 // Interactive force-directed view of the similarity graph (d3, SVG).
 import * as d3 from 'https://cdn.jsdelivr.net/npm/d3@7.9.0/+esm';
-import { shortLabel, authorNames, venue } from './openalex.js?v=20261120f';
+import { shortLabel, authorNames, venue } from './openalex.js?v=20261120g';
 
 const escHtml = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const LABEL_PX = 11; // label size on screen, whatever the zoom
@@ -134,7 +134,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
 
     linkSel = linkG.selectAll('line').data(graph.links).join('line')
       .attr('stroke-width', (l) => 0.6 + 2.4 * (l.weight / maxW))
-      .attr('stroke-opacity', (l) => 0.15 + 0.5 * (l.weight / maxW));
+      .attr('stroke-opacity', (l) => 0.12 + 0.45 * (l.weight / maxW));
 
     nodeSel = nodeG.selectAll('circle').data(graph.nodes, (n) => n.id).join('circle')
       .attr('r', (n) => n.r)
@@ -252,6 +252,7 @@ export function createGraphView(container, { onSelect, onOpen }) {
     layout = mode;
     if (!sim) return;
     applyLayout();
+    rescale();
     sim.stop();
     sim.alpha(1);
     for (let i = 0; i < 300; i++) sim.tick();
@@ -312,6 +313,8 @@ export function createGraphView(container, { onSelect, onOpen }) {
     labelSel.style('font-size', (n) => `${(n.isOrigin ? LABEL_PX + 1 : LABEL_PX) / k}px`)
       .style('stroke-width', `${3 / k}px`)
       .attr('y', (n) => n.y + n.r / sk + (LABEL_PX + 1) / k);
+    // axis text also stays the same size on screen
+    axisG.selectAll('text').style('font-size', function () { return `${(this.classList.contains('axis-title') ? 12 : 11) / k}px`; });
   }
 
   // Show as many labels as fit without overlapping, most important first:
