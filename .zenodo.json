@@ -1,0 +1,8 @@
+{
+  "title": "Rhizome: a free, open-source explorer of the literature around any paper",
+  "description": "Rhizome builds an interactive graph of the papers most similar to a chosen paper, combining bibliographic coupling and co-citation computed from OpenAlex data, with prior and derivative works lists and BibTeX/RIS export for reference managers. Live at https://israel-tetteh.github.io/rhizome/",
+  "upload_type": "software",
+  "license": "MIT",
+  "creators": [{ "name": "Tetteh, Israel Tawiah" }],
+  "keywords": ["literature review", "citation network", "bibliographic coupling", "co-citation", "OpenAlex", "research tools"]
+}

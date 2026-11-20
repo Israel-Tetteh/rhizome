@@ -2,11 +2,31 @@
 
 **A free, open-source map of the literature around any paper.**
 
-Give Rhizome one paper (a DOI, a title, an OpenAlex or Semantic Scholar id, or a link) and it draws an
+[![Open Rhizome](https://img.shields.io/badge/open-Rhizome-2f6f5e?style=flat-square)](https://israel-tetteh.github.io/rhizome/)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-c9822b?style=flat-square)](LICENSE)
+[![Data: OpenAlex](https://img.shields.io/badge/data-OpenAlex%20(CC0)-5b6bbf?style=flat-square)](https://openalex.org)
+[![Tests](https://img.shields.io/badge/tests-node%20--test-3f9bb3?style=flat-square)](tests/)
+
+Give Rhizome one paper (a DOI, a title, an OpenAlex id, or a Connected Papers link) and it draws an
 interactive graph of the papers most closely related to it. Similar papers sit close together and are
 linked, even when they never cite each other. No account, no subscription, no tracking.
 
-**Use it:** https://israel-tetteh.github.io/rhizome/
+**Use it now:** https://israel-tetteh.github.io/rhizome/
+
+![Rhizome showing the papers related to a 2022 study of the sorghum DOMINANT AWN INHIBITOR gene](docs/screenshot-light.jpg)
+
+<details>
+<summary>Timeline layout in the Night theme</summary>
+
+![The same graph laid out by publication year, in the dark Night theme](docs/screenshot-timeline-dark.jpg)
+
+</details>
+
+## Why
+
+Mapping a field around a key paper is one of the fastest ways to start a literature review, but the
+popular tools for it are paid. Rhizome does the same job with open data and open code, so any student
+or researcher can use it, host it, or improve it.
 
 ## What you get
 
@@ -91,8 +111,19 @@ To host your own copy, fork the repo and turn on GitHub Pages (Settings → Page
 Issues and pull requests are welcome. Ideas on the list: graphs built from several origin papers, saving whole graphs,
 and an R/Shiny companion.
 
+## How to cite
+
+If Rhizome helps your research, please cite it. GitHub's **Cite this repository** button (right-hand
+side of the repo page) gives APA and BibTeX versions from [`CITATION.cff`](CITATION.cff):
+
+> Tetteh, I. T. (2026). *Rhizome: a free, open-source explorer of the literature around any paper*
+> (Version 1.0.0) [Computer software]. https://github.com/Israel-Tetteh/rhizome
+
+Please also cite OpenAlex, which provides the data:
+
+> Priem, J., Piwowar, H., & Orr, R. (2022). OpenAlex: A fully-open index of scholarly works, authors,
+> venues, institutions, and concepts. arXiv:2205.01833.
+
 ## Licence
 
-MIT, see [LICENSE](LICENSE). Data from OpenAlex is CC0. Please cite OpenAlex if you use Rhizome in published work:
-Priem, J., Piwowar, H., & Orr, R. (2022). OpenAlex: A fully-open index of scholarly works, authors, venues,
-institutions, and concepts. arXiv:2205.01833.
+MIT, see [LICENSE](LICENSE). Data from OpenAlex is CC0.

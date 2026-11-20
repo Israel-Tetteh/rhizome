@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use Rhizome in your research, please cite it as below."
+title: "Rhizome: a free, open-source explorer of the literature around any paper"
+abstract: >-
+  Rhizome builds an interactive graph of the papers most similar to a chosen paper,
+  combining bibliographic coupling and co-citation computed from OpenAlex data, with
+  prior and derivative works lists and BibTeX/RIS export for reference managers.
+type: software
+authors:
+  - family-names: Tetteh
+    given-names: Israel Tawiah
+license: MIT
+version: 1.0.0
+date-released: "2026-11-20"
+repository-code: "https://github.com/Israel-Tetteh/rhizome"
+url: "https://israel-tetteh.github.io/rhizome/"
+keywords:
+  - literature review
+  - citation network
+  - bibliographic coupling
+  - co-citation
+  - OpenAlex
+  - research tools
+references:
+  - type: article
+    title: "OpenAlex: A fully-open index of scholarly works, authors, venues, institutions, and concepts"
+    authors:
+      - family-names: Priem
+        given-names: Jason
+      - family-names: Piwowar
+        given-names: Heather
+      - family-names: Orr
+        given-names: Richard
+    year: 2022
+    identifiers:
+      - type: other
+        value: "arXiv:2205.01833"
